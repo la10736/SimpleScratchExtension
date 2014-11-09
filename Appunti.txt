@@ -1,0 +1,29 @@
+Obittivo generale:
+Framework per costruire extensions n per Scratch 2.0. Di base fornisce un web server che sulle porte
+di interfaccia (esempio 80) fornisce la possibilità di scaricare la definizione JSON dell'estensione
+e poi rimane come webservice per i servizi delle le estensioni.
+Le estensioni in un primo momento saranno realizzate con il metodo dei webservice, successivamente
+si potranno scarcare anche le estensioni javascript che accederanno sempre al webservice.
+
+Il caso d'uso standard è quello di accedere al webserver e richiedere una estensione che verrà data
+sotto forma di file JSON da caricare su Scratch. Una richiesta impegna il servizio (verrà data una
+porta ad hoc che verrà liberata dopo un timeout di non accesso). In seguito la persistenza nel tempo
+potrà essere migliorata. Il backend implementa una serie di classi per rendere semplice scrivere una
+estensione lasciando al motore sotto tutta la parte di protocollo e l'implementatatore si dovrà
+preccupare solo di implementare i metodi astratti per i comandi e le letture.
+
+Le tappe sono le seguenti:
+ - Oggetti estensione e sensore:
+ -- Sensore: classe python che implemnta il sensore
+ -- Esetnsione: registrabile su un manager e composta di uno o più sensori
+   L'estensione ha un metodo che rende una istanza del servizio la quale ha i metodi start, stop
+   e get_description() che rende il dizionario di descrizzione (quello che poi viene trasformato
+   in JSON per caricarlo su Scratch)
+ - Convertitore Scratch 1.4 a Estensioni Scratch 2.0: Usando il parser per estensioni 1.4 costruire
+ Estensioni e registrarle sul manager
+ - Webserver delle estensioni registrate e richiesta di una istanza: Mostra le estensioni presenti,
+ quelle già associate all'indirizzo IP del client (in seguito utenti), permette di eliminare quelle
+ vecchie
+ - Introduzione dei vari oggetti previsti dalle estensioni Scratch 2.0 (sincroni e asincroni)
+ - Esempio applicazione di messaging e multiplayer
+ - Wrapper javascript che chiama i metodi sul server
