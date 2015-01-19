@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+{% block body %}
+<h2> Exstension Definitions </h2>
+<ul class=entries>
+    {% for ed in definitions %}
+    <li><h3>{{ ed.name }}</h3>
+        <ul>
+            {% for c in ed.components %}
+            <li><em>{{c.name}}</em> of type <em>{{c.type}}</em></li>
+            {% else %}
+            <li><em>No Components</em></li>
+            {% endfor %}
+            <li>
+                <form action="{{ url_for('add_component_to_definition') }}" method=post class=.add-small>
+                    <dl>
+                        Type:
+                        <select name=type>
+                            <option label="Sensor">sensor</option>
+                            <option label="Command">command</option>
+                        </select>
+                        Name:
+                        <input type=text size=15 name=name>
+                        Defaults:
+                        <input type=text size=10 name=value>
+                        <input type=text size=30 name=description>
+                        <input type=hidden name=ed_name value="{{ed.name}}">
+                        <input type=submit value=Add>
+                    </dl>
+                </form>
+            </li>
+        </ul>
+        <form action="{{ url_for('create_extension') }}" method=post class=add-entry>
+            <dl>
+                Name:
+                <input type=text size=30 name=name>
+                <input type=hidden name=definition value="{{ed.name}}">
+                <input type=submit value=Create>
+            </dl>
+        </form>
+    </li>
+    {% else %}
+    <li><em>No Extension Defininition so far</em>
+        {% endfor %}
+</ul>
+<h2> Exstensions</h2>
+<ul class=entries>
+    {% for e in extensions %}
+    <li><h3>{{ e.name }}</h3>: <a href="{{ e.name }}.sed">{{ e.name }}.sed</a>
+        {% if e.running %}
+        <a href="http://{{ e.address }}:{{ e.port }}">Running</a>
+        <a href="{{url_for('stop_extension',ex_name=e.name) }}">Click to Stop</a>
+        {% else %}
+        <a href="{{url_for('start_extension',ex_name=e.name) }}">Click to Start</a>
+        {% endif %}
+        <ul>
+            {% for c in e.components %}
+            {% if c.type == "r" %}
+            <li><em>Sensor {{c.name}}</em> = <em>{{c.get()}}</em>
+
+                <form action="{{ url_for('sensor_set') }}" method=post class=.add-small>
+                    <dl>
+                        <input type=hidden name=ex_name value="{{e.name}}">
+                        <input type=hidden name=c value="{{c.name}}">
+                        <input type=text size=10 value="{{c.get()}}" name=value>
+                        <input type=submit value=Change>
+                    </dl>
+                </form>
+            </li>
+            {% endif %}
+            {% if c.type == " " %}
+            <li>Command <em>{{c.name}}</em> = <em>{{c.value}}</em></li>
+            {% endif %}
+
+            {% else %}
+            <li><em>No Components</em></li>
+            {% endfor %}
+        </ul>
+    </li>
+    {% else %}
+    <li><em>No Extension so far</em></li>
+    {% endfor %}
+</ul>
+{% endblock %}

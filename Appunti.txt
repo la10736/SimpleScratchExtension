@@ -27,3 +27,19 @@ Le tappe sono le seguenti:
  - Introduzione dei vari oggetti previsti dalle estensioni Scratch 2.0 (sincroni e asincroni)
  - Esempio applicazione di messaging e multiplayer
  - Wrapper javascript che chiama i metodi sul server
+
+
+
+Bisogna rivedere la struttura delle extension:
+
+- Factory: si occupano di costruire le extension con il metodo create() che puo tornare o una
+extension o una lista di extension. Possono essere temporanee o stabili e quindi esistono i
+metodi register(), deregister() e registered() per registrare, deregistrare e avere un dizzionario
+con i registarti.
+- Definizioni: servono per costruire le factory aggiungendo le descrizioni dei componenti e
+metacomponenti (and esempio i bridge). Ogni descrizione ha i metodi per aggiungere i componenti
+e metacomponenti. E' possibilie costruire le prorie definizioni usando i MixIn per i componenti
+che si vuole e aggiungere i propri.
+- Extension: Sono quelle che fanno i lavoro. Nel caso l'estensione da scrivere non usa solo
+componenti base (con opportune implementazioni) ma ha anche una logica di alto livello e' necessario
+sovrascrivere questa classe o implementare una logica che la pilota.
