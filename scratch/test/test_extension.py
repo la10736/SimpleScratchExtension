@@ -1,8 +1,11 @@
-from unittest.mock import patch, Mock, PropertyMock, DEFAULT, MagicMock
 
 __author__ = 'michele'
-
 import unittest
+try:
+    import unitest.mock as mock
+except ImportError:
+    import mock
+from mock import patch, Mock, PropertyMock, MagicMock
 from scratch.extension import ExtensionDefinition as ED
 from scratch.extension import Extension as E, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
 from scratch.extension import ExtensionBase as EB, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS

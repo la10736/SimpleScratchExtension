@@ -1,8 +1,12 @@
-from mock import Mock
 
 __author__ = 'michele'
 
 import unittest
+try:
+    import unitest.mock as mock
+except ImportError:
+    import mock
+from mock import Mock
 from scratch.extension import ExtensionFactory as EF, ExtensionGroup as EG
 
 

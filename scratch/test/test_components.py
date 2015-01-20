@@ -1,8 +1,11 @@
-from unittest.mock import patch, Mock
-
 __author__ = 'michele'
 
 import unittest
+try:
+    import unitest.mock as mock
+except ImportError:
+    import mock
+from mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF
 
 

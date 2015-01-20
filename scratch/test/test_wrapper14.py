@@ -1,9 +1,13 @@
-from unittest.mock import Mock, patch
-from scratch.receiver14 import tokenizer, split_message, Scratch14SensorReceiverHandler
-
 __author__ = 'michele'
 
 import unittest
+try:
+    import unitest.mock as mock
+except ImportError:
+    import mock
+from mock import patch, Mock
+from scratch.receiver14 import tokenizer, split_message, Scratch14SensorReceiverHandler
+
 
 
 class TestParser(unittest.TestCase):
