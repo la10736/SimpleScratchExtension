@@ -3,10 +3,9 @@ __author__ = 'michele'
 
 import unittest
 try:
-    import unitest.mock as mock
+    from unittest.mock import Mock
 except ImportError:
-    import mock
-from mock import Mock
+    from mock import Mock
 from scratch.extension import ExtensionFactory as EF, ExtensionGroup as EG
 
 

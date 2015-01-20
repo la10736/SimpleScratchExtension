@@ -341,7 +341,6 @@ class Extension():
     def _init_components(self):
         self._components = {c.name: c for c in self.do_init_components()}
 
-
     def start(self):
         if self._server_thread is None:
             self._server_thread = threading.Thread(name="%s HTTP Server" % self.name, target=self._http.serve_forever)
@@ -358,7 +357,6 @@ class Extension():
     @property
     def running(self):
         return self._server_thread is not None
-
 
     @property
     def name(self):
@@ -382,7 +380,6 @@ class Extension():
 
     def get_component(self, name):
         return self._components[name]
-
 
     @property
     def description(self):
@@ -459,16 +456,6 @@ class Extension():
         if cgi is not None:
             return cgi
         return self._resolve_local_cgi(path)
-
-    def _create_app(self):
-        app = flask.Flask("scratch")
-
-        @app.route("/poll")
-        def poll():
-            return self.poll_dict_render(self.poll())
-
-        return app
-
 
 class ExtensionBase(Extension):
     """The extension created by a ExtensionDefinition."""

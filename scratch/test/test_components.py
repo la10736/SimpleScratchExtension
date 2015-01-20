@@ -2,10 +2,9 @@ __author__ = 'michele'
 
 import unittest
 try:
-    import unitest.mock as mock
+    from unittest.mock import patch, Mock
 except ImportError:
-    import mock
-from mock import patch, Mock
+    from mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF
 
 
