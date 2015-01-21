@@ -1,7 +1,7 @@
 
 __author__ = 'michele'
 import unittest
-from portability.mock import patch, Mock, PropertyMock, MagicMock
+from scratch.portability.mock import patch, Mock, PropertyMock, MagicMock
 from scratch.extension import ExtensionDefinition as ED
 from scratch.extension import Extension as E, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
 from scratch.extension import ExtensionBase as EB, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS

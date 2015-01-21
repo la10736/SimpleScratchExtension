@@ -1,7 +1,7 @@
 __author__ = 'michele'
 
 import unittest
-from portability.mock import patch, Mock
+from scratch.portability.mock import patch, Mock
 from scratch.receiver14 import tokenizer, split_message, Scratch14SensorReceiverHandler
 
 

@@ -1,7 +1,7 @@
 __author__ = 'michele'
 
 import unittest
-from portability.mock import patch, Mock
+from scratch.portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF
 
 
