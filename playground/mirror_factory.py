@@ -2,7 +2,7 @@ import json
 import logging
 from scratch.components import CommandFactory, SensorFactory
 from scratch.extension import ExtensionFactory, Extension, EXTENSION_DEFAULT_PORT
-from utils import get_local_address
+from scratch.utils import get_local_address
 import sys
 
 __author__ = 'michele'
