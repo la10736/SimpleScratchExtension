@@ -1,10 +1,7 @@
 __author__ = 'michele'
 
 import unittest
-try:
-    from unittest.mock import patch, Mock
-except ImportError:
-    from mock import patch, Mock
+from portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF
 
 

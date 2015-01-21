@@ -1,10 +1,7 @@
 __author__ = 'michele'
 
 import unittest
-try:
-    from unittest.mock import patch, Mock
-except ImportError:
-    from mock import patch, Mock
+from portability.mock import patch, Mock
 from scratch.receiver14 import tokenizer, split_message, Scratch14SensorReceiverHandler
 
 
