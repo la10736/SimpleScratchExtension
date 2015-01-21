@@ -3,7 +3,7 @@ import logging
 
 
 try:
-    from unitest.mock import *
+    from unittest.mock import *
 except ImportError:
     try:
         from mock import *

@@ -2,11 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="e9ef8a7b-131c-4a26-849a-83ccbf71f6b4" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/scratch/test/__init__.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/scratch/test/test_components.py" afterPath="$PROJECT_DIR$/scratch/test/test_components.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/scratch/test/test_extension.py" afterPath="$PROJECT_DIR$/scratch/test/test_extension.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/scratch/test/test_extension_factory.py" afterPath="$PROJECT_DIR$/scratch/test/test_extension_factory.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/scratch/test/test_wrapper14.py" afterPath="$PROJECT_DIR$/scratch/test/test_wrapper14.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/scratch/portability/mock.py" afterPath="$PROJECT_DIR$/scratch/portability/mock.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="SimpleScratchExtension.iws" />
@@ -68,21 +64,21 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="__init__.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="__init__.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/scratch/test/__init__.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="669">
+            <state vertical-scroll-proportion="-0.0" vertical-offset="0" max-vertical-offset="119">
               <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
               <folding />
             </state>
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="mock.py" pinned="false" current-in-tab="false">
+      <file leaf-file-name="mock.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/scratch/portability/mock.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="306">
-              <caret line="8" column="26" selection-start-line="8" selection-start-column="26" selection-end-line="8" selection-end-column="26" />
+            <state vertical-scroll-proportion="0.30493274" vertical-offset="0" max-vertical-offset="669">
+              <caret line="12" column="0" selection-start-line="12" selection-start-column="0" selection-end-line="12" selection-end-column="0" />
               <folding />
             </state>
           </provider>
@@ -151,12 +147,12 @@
         <option value="$APPLICATION_HOME_DIR$/helpers/pydev/_pydev_imps/_pydev_pluginbase.py" />
         <option value="$PROJECT_DIR$/scratch/test/_portability.py" />
         <option value="$PROJECT_DIR$/scratch/extension.py" />
-        <option value="$PROJECT_DIR$/scratch/portability/mock.py" />
         <option value="$PROJECT_DIR$/scratch/test/test_components.py" />
         <option value="$PROJECT_DIR$/scratch/test/test_extension_factory.py" />
         <option value="$PROJECT_DIR$/scratch/test/test_wrapper14.py" />
         <option value="$PROJECT_DIR$/scratch/test/test_extension.py" />
         <option value="$PROJECT_DIR$/scratch/test/__init__.py" />
+        <option value="$PROJECT_DIR$/scratch/portability/mock.py" />
       </list>
     </option>
   </component>
@@ -595,12 +591,18 @@
       <option name="project" value="LOCAL" />
       <updated>1421844339616</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="test should be a package">
+      <created>1421845925689</created>
+      <option name="number" value="00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1421845925689</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="ToolWindowManager">
     <frame x="0" y="24" width="1920" height="1176" extended-state="6" />
-    <editor active="false" />
+    <editor active="true" />
     <layout>
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -613,7 +615,7 @@
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Application Servers" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Project" active="true" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.25506938" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.25506938" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.32962963" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
@@ -642,7 +644,8 @@
     </option>
     <MESSAGE value="Back port a 3.2" />
     <MESSAGE value="Back port to 3.2: a good pattern implementation" />
-    <option name="LAST_COMMIT_MESSAGE" value="Back port to 3.2: a good pattern implementation" />
+    <MESSAGE value="test should be a package" />
+    <option name="LAST_COMMIT_MESSAGE" value="test should be a package" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -830,14 +833,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/scratch/portability/mock.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="306">
-          <caret line="8" column="26" selection-start-line="8" selection-start-column="26" selection-end-line="8" selection-end-column="26" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/scratch/test/test_components.py">
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="-1.36" vertical-offset="17" max-vertical-offset="5559">
@@ -874,6 +869,14 @@
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="694">
           <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/scratch/portability/mock.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.30493274" vertical-offset="0" max-vertical-offset="669">
+          <caret line="12" column="0" selection-start-line="12" selection-start-column="0" selection-end-line="12" selection-end-column="0" />
           <folding />
         </state>
       </provider>
