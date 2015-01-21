@@ -3,7 +3,6 @@ import io
 import logging
 import threading
 import weakref
-from scratch import components
 from scratch.cgi import CGI
 from scratch.components import SensorFactory, CommandFactory
 

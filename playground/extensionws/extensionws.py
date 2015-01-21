@@ -4,9 +4,10 @@ import flask
 
 __author__ = 'michele'
 
-from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash, make_response
+from flask import Flask, request, redirect, url_for, render_template, flash, make_response
 
 from scratch.extension import Extension, ExtensionDefinition, ExtensionBase
+from scratch.utils import get_local_address
 
 
 # configuration
@@ -25,18 +26,6 @@ def show_entries():
     definitions = [ExtensionDefinition.get_registered(n) for n in ExtensionDefinition.registered()]
     extensions = [Extension.get_registered(n) for n in Extension.registered()]
     return render_template('show_entries.html', definitions=definitions, extensions=extensions)
-
-
-def get_local_address(destination):
-    """Guess the local address where the client can reach the server"""
-    s = socket.socket(type=socket.SOCK_DGRAM)
-    try:
-        """by using datagram socket I can connect without any exception if the
-        address is reacheble"""
-        s.connect((destination, 37852))
-        return s.getsockname()[0]
-    except socket.error:
-        return ""
 
 
 @app.route('/<ex_name>.sed')

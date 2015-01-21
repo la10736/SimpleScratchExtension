@@ -2,8 +2,13 @@ import json
 import logging
 from scratch.components import CommandFactory, SensorFactory
 from scratch.extension import ExtensionFactory, Extension, EXTENSION_DEFAULT_PORT
+from utils import get_local_address
+import sys
 
 __author__ = 'michele'
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 55066
 
 
 class Positions():
@@ -23,7 +28,7 @@ class Positions():
 
 class Slave(Extension):
     def __init__(self, base_name, *args, **kwargs):
-        super().__init__(base_name+"-Slave", *args, **kwargs)
+        super().__init__(base_name + "-Slave", *args, **kwargs)
         self.base_name = base_name
 
     def do_init_components(self):
@@ -40,7 +45,7 @@ class Slave(Extension):
 
 class Master(Extension):
     def __init__(self, base_name, *args, **kwargs):
-        super().__init__(base_name+"-Master", *args, **kwargs)
+        super().__init__(base_name + "-Master", *args, **kwargs)
         self.base_name = base_name
         self.p = Positions()
         self.f = Positions(1, 1, 1)
@@ -48,7 +53,7 @@ class Master(Extension):
 
     def _find_slave(self):
         g = self.group
-        slave_name = self.base_name+"-Slave"
+        slave_name = self.base_name + "-Slave"
         for e in g.extensions:
             if e.name == slave_name:
                 return e
@@ -78,13 +83,13 @@ class Master(Extension):
 
     def do_init_components(self):
         source = CommandFactory(ed=None, name="Source",
-                                     description="Source x=%n y=%n direction=%n").create(self)
+                                description="Source x=%n y=%n direction=%n").create(self)
         source.do_command = self.source_do_command
         factors = CommandFactory(ed=None, name="Factors",
-                                      description="Reference factors x=%n y=%n direction=%n").create(self)
+                                 description="Reference factors x=%n y=%n direction=%n").create(self)
         factors.do_command = self.factors_do_command
         references = CommandFactory(ed=None, name="References",
-                                         description="References x=%n y=%n direction=%n").create(self)
+                                    description="References x=%n y=%n direction=%n").create(self)
         references.do_command = self.references_do_command
         return [source, factors, references]
 
@@ -97,6 +102,7 @@ class MirrorFactory(ExtensionFactory):
             def void():
                 while True:
                     yield 0
+
             ports = void()
         return [Master(base_name=base_name, port=next(ports)),
                 Slave(base_name=base_name, port=next(ports))]
@@ -104,12 +110,51 @@ class MirrorFactory(ExtensionFactory):
     def __init__(self):
         super().__init__("Mirror")
 
-factory = MirrorFactory()
-g = factory.create("test", port=55066)
-for e in g.extensions:
-    with open(e.name+".sed", "w") as f:
-        json.dump(e.description, fp=f)
+def usage(e=-1):
+    print("""Use {} -h | [host [port]]
+    -h      this help
+    host    your ip address where scratch can reach
+    port    the master extension port, slave will use port+1 (<0 use default = {}, 0 to leave the
+            the SO get a free two)
 
-g.start()
-input("Enter to stop servers")
+    After start you will find in same directory two file test-Master.sed and test-Slave.sed. Load the
+    first one in your master scratch application (hold shift, open file menu and select
+    "import experimental HTTP extension") and the second one on an other scratch (can be the same
+    application too).
+
+    Look at more block and ...have fun!
+
+    ....When you are done to play press enter.
+    """.format(sys.argv[0]))
+    exit(e)
+
+
+if __name__ == '__main__':
+
+    host = DEFAULT_HOST
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "-h":
+            usage(0)
+        host = sys.argv[1]
+        if host.lower() == "guess":
+            host = get_local_address("www.google.com")
+            if not host:
+                logging.warning("Cannot guess your host [default to {}]: "
+                                "please use {} <your local address>".format(DEFAULT_HOST, sys.args[0]))
+                host = DEFAULT_HOST
+    if len(sys.argv) > 2:
+        port = int(sys.argv[1])
+        if port < 0:
+            port = DEFAULT_PORT
+
+    factory = MirrorFactory()
+    g = factory.create("test", port=55066)
+    for e in g.extensions:
+        with open(e.name + ".sed", "w") as f:
+            d = e.description
+            d["host"] = host
+            json.dump(d, fp=f)
+
+    g.start()
+    input("Enter to stop servers")
 
