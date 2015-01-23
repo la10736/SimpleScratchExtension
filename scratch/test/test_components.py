@@ -313,6 +313,18 @@ class TestCommand(unittest.TestCase):
             mock_command.assert_called_with("a", "b", "c d", "1234")
 
     def test_create(self):
+        mock_e = Mock()
+        c = C.create(mock_e, "control")
+        self.assertIs(mock_e, c.extension)
+        self.assertEqual(c.name,"control")
+
+        c = C.create(mock_e, "control2", (1,2,3), description="ASD")
+        self.assertIs(mock_e, c.extension)
+        self.assertEqual(c.name, "control2")
+        self.assertEqual(c.info.default, (1,2,3))
+        self.assertEqual(c.description, "ASD")
+
+
         self.fail("Shortcut that create a factory and then sensor: It also test"
                   "that info must be hard ref instead of weak ref."
                   "Should be a classmethod")

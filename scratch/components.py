@@ -149,8 +149,8 @@ class CommandFactory():
     def definition(self):
         return [self.type, self.description, self.name] + [d for d in self._default]
 
-    def create(self, extension, *args, **kwargs):
-        return Command(extension, self, *args, **kwargs)
+    def create(self, extension):
+        return Command(extension, self)
 
 
 class Command():
@@ -159,6 +159,11 @@ class Command():
     the property value return last value (or tuple if it haa more argument) and value_dict
     the last value in a dictionary.
     """
+
+    @staticmethod
+    def create(extension, name, default=(), description=None, **kwargs):
+        factory = CommandFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        return factory.create(extension=extension)
 
     def __init__(self, extension, info):
         self._ex = weakref.ref(extension)
