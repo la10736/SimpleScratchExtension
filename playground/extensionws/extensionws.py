@@ -6,7 +6,7 @@ __author__ = 'michele'
 
 from flask import Flask, request, redirect, url_for, render_template, flash, make_response
 
-from scratch.extension import Extension, ExtensionDefinition, ExtensionBase
+from scratch.extension import ExtensionService, ExtensionDefinition, ExtensionServiceBase
 from scratch.utils import get_local_address
 
 
@@ -24,13 +24,13 @@ eds = [ExtensionDefinition("First Definition"), ExtensionDefinition("Other Defin
 @app.route('/')
 def show_entries():
     definitions = [ExtensionDefinition.get_registered(n) for n in ExtensionDefinition.registered()]
-    extensions = [Extension.get_registered(n) for n in Extension.registered()]
+    extensions = [ExtensionService.get_registered(n) for n in ExtensionService.registered()]
     return render_template('show_entries.html', definitions=definitions, extensions=extensions)
 
 
 @app.route('/<ex_name>.sed')
 def get_extension_file(ex_name):
-    e = Extension.get_registered(ex_name)
+    e = ExtensionService.get_registered(ex_name)
     d = e.description
     my_ip = get_local_address(request.remote_addr)
     d["host"] = my_ip
@@ -44,7 +44,7 @@ def create_extension():
     ed_name = request.form['definition']
     name = request.form['name']
     ed = ExtensionDefinition.get_registered(ed_name)
-    ExtensionBase(ed, name, address=HOST)
+    ExtensionServiceBase(ed, name, address=HOST)
     flash('New extension named {} from {} created'.format(name, ed_name))
     return redirect(url_for('show_entries'))
 
@@ -69,24 +69,24 @@ def add_component_to_definition():
 
 @app.route('/<ex_name>/start')
 def start_extension(ex_name):
-    e = Extension.get_registered(ex_name)
+    e = ExtensionService.get_registered(ex_name)
     e.start()
-    flash('Extension {} started'.format(ex_name))
+    flash('ExtensionService {} started'.format(ex_name))
     return redirect(url_for('show_entries'))
 
 
 @app.route('/<ex_name>/stop')
 def stop_extension(ex_name):
-    e = Extension.get_registered(ex_name)
+    e = ExtensionService.get_registered(ex_name)
     e.stop()
-    flash('Extension {} stopped'.format(ex_name))
+    flash('ExtensionService {} stopped'.format(ex_name))
     return redirect(url_for('show_entries'))
 
 
 @app.route('/sensor_set', methods=['POST'])
 def sensor_set():
     ex_name = request.form['ex_name']
-    e = Extension.get_registered(ex_name)
+    e = ExtensionService.get_registered(ex_name)
     c_path = request.form['c']
     c = e.get_component(c_path)
     value = request.form['value']

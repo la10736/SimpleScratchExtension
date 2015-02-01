@@ -1,60 +1,14 @@
-
 __author__ = 'michele'
 
 import unittest
 from scratch.portability.mock import Mock
-from scratch.extension import ExtensionFactory as EF, ExtensionGroup as EG
-
-
-class TestExtensionGroup(unittest.TestCase):
-    """A set of extension that work in team."""
-
-    def setUp(self):
-        EF.deregister_all()
-
-    def tearDown(self):
-        EF.deregister_all()
-
-    def test_base(self):
-        ef = EF("PPP")
-        ex = Mock()
-        eg = EG(ef, "Group", ex)
-        self.assertSetEqual({ex}, eg.extensions)
-        self.assertIs(eg.factory, ef)
-        self.assertEqual("Group", eg.name)
-        extensions = [Mock(factory=ef) for _ in range(3)]
-        eg = EG(ef, "Group", *extensions)
-        self.assertSetEqual(set(extensions), eg.extensions)
-
-        for e in extensions:
-            e.define_group.assert_called_with(eg)
-
-    def test_start_stop_running(self):
-        ef = EF("PPP")
-        extensions = [Mock(factory=ef) for _ in range(3)]
-        eg = EG(ef, "Group", *extensions)
-        eg.start()
-        for e in extensions:
-            self.assertTrue(e.start.called)
-        eg.stop()
-        for e in extensions:
-            self.assertTrue(e.start.called)
-        for e in extensions:
-            e.running = True
-        self.assertTrue(eg.running)
-        extensions[0].running = False
-        self.assertFalse(eg.running)
-        extensions[0].running = True
-        extensions[1].running = False
-        self.assertFalse(eg.running)
-        extensions[1].running = True
-        self.assertTrue(eg.running)
+from scratch.extension import ExtensionServiceFactory as EF
 
 
 class TestExtensionFactory(unittest.TestCase):
-    """We will test the factory object. The factory object are "immutable" because
-    do not expose any method to change how do the work. Moreover a factory contain a
-    dictionary of his created exstension.
+    """We will test the factory object. The factory object are "immutable" and
+    not expose any methods to change how do the work. Moreover a factory contain a
+    dictionary of his created extension services.
     """
 
     def setUp(self):
@@ -125,11 +79,6 @@ class TestExtensionFactory(unittest.TestCase):
         """Exception if not exist"""
         self.assertRaises(KeyError, EF.deregister, "PPP")
 
-    def test_groups(self):
-        ef = EF("PPP")
-        self.assertEqual(set(), ef.groups)
-        self.assertRaises(KeyError, ef.group, "goofy")
-
     def test_create(self):
         """The base implementation of do_create() is abstract and raise a NotImplementedError"""
         ef = EF("PPP")
@@ -137,49 +86,16 @@ class TestExtensionFactory(unittest.TestCase):
         extensions_base = [Mock() for _ in range(3)]
         extensions = extensions_base[:]
 
-        def do_create(group_name, *args, **kwargs):
+        def do_create(*args, **kwargs):
             return extensions
 
         ef.do_create = do_create
-        self.assertEqual(set(extensions), set(ef.create().extensions))
-        """Create a group called 1"""
-        self.assertEqual({"1"}, ef.groups)
+        self.assertEqual(set(extensions), set(ef.create()))
         self.assertSetEqual(set(extensions), ef.extensions)
-        self.assertSetEqual(ef.group("1").extensions, ef.extensions)
-        self.assertIs(ef.group("1").factory, ef)
-        self.assertEqual(ef.group("1").name, "1")
         for e in extensions:
             e.define_factory.assert_called_with(ef)
 
-        """Just one extension no group"""
-        extensions = extensions_base[:1]
-        self.assertEqual(extensions, ef.create())
-        """No other groups"""
-        self.assertEqual({"1"}, ef.groups)
-
-        """Just one other group"""
-        extensions = extensions_base[:2]
-        self.assertEqual(set(extensions), set(ef.create().extensions))
-        self.assertEqual({"1","2"}, ef.groups)
-
-        """Named group"""
-        extensions = extensions_base[1:]
-        self.assertEqual(set(extensions), set(ef.create(group_name="minnie").extensions))
-        self.assertEqual({"1","2","minnie"}, ef.groups)
-
-        """Named group on single extension are ignored"""
-        extensions = extensions_base[2:]
-        self.assertEqual(extensions, ef.create(group_name="goofy"))
-        self.assertEqual({"1","2","minnie"}, ef.groups)
-
-        """Already existing groups raise exception both for 1 or more extension"""
-        extensions = extensions_base[1:]
-        self.assertRaises(ValueError, ef.create, group_name="minnie")
-        extensions = extensions_base[2:]
-        self.assertRaises(ValueError, ef.create, group_name="minnie")
-        self.assertEqual({"1","2","minnie"}, ef.groups)
-
-    def test_extension_port_generator(self):
+    def test_port_generator(self):
         ef = EF("pp")
         k = 100
         for i in ef.port_generator(k):
@@ -187,11 +103,11 @@ class TestExtensionFactory(unittest.TestCase):
             k += 1
             if k > 105:
                 break
-        self.assertEqual([10,20,30], [i for i in ef.port_generator([10,20,30])])
+        self.assertEqual([10, 20, 30], [i for i in ef.port_generator([10, 20, 30])])
 
-    def test_extension_port_generator_0_always_0(self):
+    def test_port_generator_0_always_0(self):
         ef = EF("pp")
-        i=0
+        i = 0
         for p in ef.port_generator(0):
             self.assertEqual(0, p)
             i += 1
@@ -199,7 +115,6 @@ class TestExtensionFactory(unittest.TestCase):
                 break
         self.assertGreater(i, 200)
         self.assertEqual(0, p)
-
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 import json
 import logging
 from scratch.components import CommandFactory, SensorFactory
-from scratch.extension import ExtensionFactory, Extension, EXTENSION_DEFAULT_PORT
+from scratch.extension import ExtensionServiceFactory, Extension, EXTENSION_DEFAULT_PORT, ExtensionService
 from scratch.utils import get_local_address
 import sys
 
@@ -27,28 +27,25 @@ class Positions():
 
 
 class Slave(Extension):
-    def __init__(self, base_name, *args, **kwargs):
-        super().__init__(base_name + "-Slave", *args, **kwargs)
-        self.base_name = base_name
-
     def do_init_components(self):
         self.x = SensorFactory(ed=None, name="x").create(self)
         self.y = SensorFactory(ed=None, name="y").create(self)
         self.direction = SensorFactory(ed=None, name="direction").create(self)
         return [self.x, self.y, self.direction]
 
-    def set_new_positions(self, p):
-        self.x.set(p.x)
-        self.y.set(p.y)
-        self.direction.set(p.direction)
+    def update(self, x=None, y=None, direction=None):
+        if x is not None:
+            self.x.set(x)
+        if y is not None:
+            self.y.set(y)
+        if direction is not None:
+            self.direction.set(direction)
 
 
 class MasterBase(Extension):
-    def __init__(self, base_name, *args, **kwargs):
-        super().__init__(base_name + "-Master", *args, **kwargs)
-        self.base_name = base_name
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._slave = None
-        self._slave_position = Positions()
 
     @property
     def slave(self):
@@ -59,8 +56,7 @@ class MasterBase(Extension):
         self._slave = value
 
     def update(self, x=None, y=None, direction=None):
-        self._slave_position.update(x, y, direction)
-        self.slave.set_new_positions(self._slave_position)
+        self.slave.update(x, y, direction)
 
     def do_command(self, x, y, direction):
         self.update(float(x), float(y), float(direction))
@@ -73,8 +69,8 @@ class MasterBase(Extension):
 
 
 class Master(MasterBase):
-    def __init__(self, base_name, *args, **kwargs):
-        super().__init__(base_name, *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.p = Positions()
         self.f = Positions(1, 1, 1)
         self.r = Positions()
@@ -111,23 +107,17 @@ class Master(MasterBase):
         return [source, factors, references]
 
 
-class MirrorFactorySimple(ExtensionFactory):
-    master = MasterBase
+def create_services(base_name, port=EXTENSION_DEFAULT_PORT, simple=False):
+    master = MasterBase if simple else Master
+    port_master = port
+    port_slave = 0 if port_master == 0 else port_master + 1
     slave = Slave
-
-    def __init__(self):
-        super().__init__("Mirror")
-
-    def do_create(self, base_name, port=EXTENSION_DEFAULT_PORT, *args, **kwargs):
-        ports = self.port_generator(port)
-        s = self.slave(base_name=base_name, port=next(ports))
-        m = self.master(base_name=base_name, port=next(ports))
-        m.slave = s
-        return [m, s]
-
-
-class MirrorFactory(MirrorFactorySimple):
-    master = Master
+    m = master()
+    s = slave()
+    m.slave = s
+    es_m = ExtensionService(m, base_name+"-Master", port=port_master)
+    es_s = ExtensionService(s, base_name+"-Slave", port=port_slave)
+    return [es_m, es_s]
 
 
 def usage(e=-1):
@@ -153,14 +143,14 @@ def usage(e=-1):
 if __name__ == '__main__':
 
     host = DEFAULT_HOST
-    factory = MirrorFactory
+    simple = False
     pname = sys.argv[0]
     sys.argv = sys.argv[1:]
     if len(sys.argv) and sys.argv[0] == "-h":
         usage(0)
     if len(sys.argv) and sys.argv[0] == "-s":
         print("Simple version: just one command to set remote point")
-        factory = MirrorFactorySimple
+        simple = True
         sys.argv = sys.argv[1:]
     if len(sys.argv):
         host = sys.argv[0]
@@ -176,14 +166,12 @@ if __name__ == '__main__':
         if port < 0:
             port = DEFAULT_PORT
 
-    factory = factory()
-    g = factory.create("test", port=55066)
-    for e in g.extensions:
-        with open(e.name + ".sed", "w") as f:
-            d = e.description
+    services = create_services("test", port=55066, simple=simple)
+    for s in services:
+        with open(s.name + ".sed", "w") as f:
+            d = s.description
             d["host"] = host
             json.dump(d, fp=f)
-
-    g.start()
+        s.start()
     input("Enter to stop servers")
 

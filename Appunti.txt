@@ -40,6 +40,6 @@ con i registarti.
 metacomponenti (and esempio i bridge). Ogni descrizione ha i metodi per aggiungere i componenti
 e metacomponenti. E' possibilie costruire le prorie definizioni usando i MixIn per i componenti
 che si vuole e aggiungere i propri.
-- Extension: Sono quelle che fanno i lavoro. Nel caso l'estensione da scrivere non usa solo
+- ExtensionService: Sono quelle che fanno i lavoro. Nel caso l'estensione da scrivere non usa solo
 componenti base (con opportune implementazioni) ma ha anche una logica di alto livello e' necessario
 sovrascrivere questa classe o implementare una logica che la pilota.

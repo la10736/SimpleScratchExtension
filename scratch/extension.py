@@ -102,52 +102,10 @@ class ExtensionDefinition():
         return self._components[name]
 
 
-class ExtensionGroup():
-    """A set of extension that work in team."""
-
-    def __init__(self, factory, name, *extensions):
-        """ Create a group of extension.
-
-        :param factory: The factory that create the extensions
-        :param name: The name of the Group
-        :param extensions: the extensions in the group (cannot be changed) must be at least one
-        """
-        self.__factory = factory
-        self.__name = name
-        if not len(extensions):
-            raise ValueError("A group must contain at least one extension")
-        for e in extensions:
-            e.define_group(self)
-        self.__extensions = weakref.WeakSet(extensions)
-
-    @property
-    def extensions(self):
-        return self.__extensions.copy()
-
-    @property
-    def name(self):
-        return self.__name
-
-    @property
-    def factory(self):
-        return self.__factory
-
-    def start(self):
-        for e in self.__extensions:
-            e.start()
-
-    def stop(self):
-        for e in self.__extensions:
-            e.stop()
-
-    @property
-    def running(self):
-        return all([e.running for e in self.__extensions])
-
-
-class ExtensionFactory():
-    """The factory object are "immutable" because do not expose any method to change how create extension object.
-    Moreover a factory contain a dictionary of his created exstension.
+class ExtensionServiceFactory():
+    """The factory object are "immutable" and do not expose any method to change how create extension service
+    objects.
+    Moreover a factory contain a dictionary of his created extension.
     """
     __anonymous = "anonymous"
     __registered = {}
@@ -156,23 +114,23 @@ class ExtensionFactory():
     def __register(obj):
         if obj.__name is None:
             return
-        if obj.__name in ExtensionFactory.__registered:
+        if obj.__name in ExtensionServiceFactory.__registered:
             raise ValueError("Factory named {} already exist".format(obj.__name))
-        ExtensionFactory.__registered[obj.__name] = obj
+        ExtensionServiceFactory.__registered[obj.__name] = obj
 
     @staticmethod
     def deregister_all():
-        ExtensionFactory.__registered = {}
+        ExtensionServiceFactory.__registered = {}
 
     @staticmethod
     def registered(name=None):
         if name is None:
-            return frozenset(ExtensionFactory.__registered.keys())
-        return ExtensionFactory.__registered.get(name, None)
+            return frozenset(ExtensionServiceFactory.__registered.keys())
+        return ExtensionServiceFactory.__registered.get(name, None)
 
     @staticmethod
     def deregister(name):
-        del ExtensionFactory.__registered[name]
+        del ExtensionServiceFactory.__registered[name]
 
     def __init__(self, name=None):
         """
@@ -198,14 +156,13 @@ class ExtensionFactory():
             pass
         while True:
             yield port
-            if port>0:
+            if port > 0:
                 port += 1
 
-    def do_create(self, group_name, *args, **kwargs):
+    def do_create(self, *args, **kwargs):
         """ Create a group of extension from the factory. The concrete factory must
          implement that method.
 
-        :param group_name: The extensions base_name
         :param args: positional args passed to Extension Constructor
         :param kwargs: Nominal args passed to Extension Constructor
         :return: a list of extensions
@@ -217,32 +174,10 @@ class ExtensionFactory():
             e.define_factory(self)
             self.__extensions.add(e)
 
-    @property
-    def groups(self):
-        return self.__groups.keys()
-
-    def group(self, key):
-        return self.__groups[key]
-
-    def _search_next_index_group_name(self):
-        while str(self.__next_index_name) in self.__groups:
-            self.__next_index_name += 1
-
-    def create(self, group_name=None, *args, **kwargs):
-        if group_name is not None and group_name in self.__groups:
-            raise ValueError("Group name already present")
-        gen = False
-        if group_name is None:
-            self._search_next_index_group_name()
-            group_name = str(self.__next_index_name)
-            gen = True
-        ret = extensions = self.do_create(group_name, *args, **kwargs)
+    def create(self, base_name="", *args, **kwargs):
+        extensions = self.do_create(base_name, *args, **kwargs)
         self.__register_extensions(*extensions)
-        if len(extensions) > 1:
-            ret = self.__groups[group_name] = ExtensionGroup(self, group_name, *extensions)
-            if gen:
-                self.__next_index_name += 1
-        return ret
+        return extensions
 
     @property
     def extensions(self):
@@ -250,8 +185,61 @@ class ExtensionFactory():
 
 
 class Extension():
-    """The extension: create by a ExtensionDefinition it binds the server that respond to
-    scratch query. Expose method to get the components.
+    """The object that contains components and will be served from ExtensionService()"""
+
+    def __init__(self):
+        self._components = {}
+        self._init_components()
+        self._factory = None
+
+    @property
+    def factory(self):
+        return self._factory
+
+    def define_factory(self, factory):
+        if self._factory is not None and not factory is self._factory:
+            raise RuntimeError("Factory can be defined just once")
+        self._factory = factory
+
+    def do_init_components(self):
+        """The method to override to initialize the components and return it"""
+        logging.warning("You should implement that method in your concrete class")
+        return []
+
+    def _init_components(self):
+        self._components = {c.name: c for c in self.do_init_components()}
+
+    @property
+    def components(self):
+        return self._components.values()
+
+    @property
+    def components_name(self):
+        return self._components.keys()
+
+    def get_component(self, name):
+        return self._components[name]
+
+    def do_reset(self):
+        "Method to override to and application specific reset actions"
+        pass
+
+    def reset(self):
+        for c in self.components:
+            c.reset()
+        self.do_reset()
+
+    def poll(self):
+        return {c.name: c.get() for c in self.components if c.type == 'r'}
+
+    @property
+    def block_specs(self):
+        return [c.definition for c in self.components]
+
+
+class ExtensionService():
+    """The extension service: create by a Extension object it binds the server that respond to
+    Scratch query. Expose method to get the extension, start and stop the service.
     """
 
     class HTTPHandler(BaseHTTPRequestHandler):
@@ -300,46 +288,41 @@ class Extension():
 
     @staticmethod
     def _register_name(name, ed):
-        if name in Extension._names:
+        if name in ExtensionService._names:
             raise ValueError("Exstension named '{}' still exist".format(name))
-        Extension._names[name] = ed
+        ExtensionService._names[name] = ed
 
     @staticmethod
     def _unregister_all():
-        Extension._names = {}
+        ExtensionService._names = {}
 
     @staticmethod
     def registered():
-        return set(Extension._names.keys())
+        return set(ExtensionService._names.keys())
 
     @staticmethod
     def get_registered(name):
-        return Extension._names[name]
+        return ExtensionService._names[name]
 
-    def __init__(self, name, address=EXTENSION_DEFAULT_ADDRESS, port=EXTENSION_DEFAULT_PORT):
+    def __init__(self, extension, name, address=EXTENSION_DEFAULT_ADDRESS, port=EXTENSION_DEFAULT_PORT):
+        """Create a service that serve Scracth 2 requests for an extension object.
+        """
+        self._extension = extension
         self._name = name
         self._address = address
         self._port = port
-        self._components = {}
-        self._init_components()
         self._server_thread = None
-        self._http = HTTPServer((address, port), Extension.HTTPHandler)
+        self._http = HTTPServer((address, port), ExtensionService.HTTPHandler)
         self._http._context = weakref.ref(self)
         self._cgi_map = {"/poll": {"cgi": "_poll_cgi"},
                          "/crossdomain.xml": {"cgi": "_crossdomain_xml",
                                               "headers": {"Content-type": "text/xml"}},
                          "/reset_all": {"cgi": "reset"}}
         self._register_name(name, self)
-        self._factory = None
-        self._group = None
 
-    def do_init_components(self):
-        """The method to override to initialize the components and return it"""
-        logging.warning("You should implement that method in your concrete class")
-        return []
-
-    def _init_components(self):
-        self._components = {c.name: c for c in self.do_init_components()}
+    @property
+    def extension(self):
+        return self._extension
 
     def start(self):
         if self._server_thread is None:
@@ -371,47 +354,15 @@ class Extension():
         return self._http.server_port
 
     @property
-    def components(self):
-        return self._components.values()
-
-    @property
-    def components_name(self):
-        return self._components.keys()
-
-    def get_component(self, name):
-        return self._components[name]
-
-    @property
     def description(self):
         ret = {"extensionName": self.name,
                "extensionPort": self.port,
-               "blockSpecs": [c.definition for c in self.components]
+               "blockSpecs": self._extension.block_specs
         }
         return ret
 
-    @property
-    def factory(self):
-        return self._factory
-
-    def define_factory(self, factory):
-        if self._factory is not None and not factory is self._factory:
-            raise RuntimeError("Factory can be defined just once")
-        self._factory = factory
-
-    @property
-    def group(self):
-        return self._group
-
-    def define_group(self, group):
-        if self._group is not None and not group is self._group:
-            raise RuntimeError("Group can be defined just once")
-        self._group = group
-
-    def poll(self):
-        return {c.name: c.get() for c in self.components if c.type == 'r'}
-
     def _poll_cgi(self, handler):
-        return self.poll_dict_render(self.poll())
+        return self.poll_dict_render(self._extension.poll())
 
     @staticmethod
     def poll_dict_render(vals):
@@ -425,14 +376,8 @@ class Extension():
 <allow-access-from domain="*" to-ports="{}"/>
 </cross-domain-policy>""".format(self.port)
 
-    def do_reset(self, request=None):
-        "Method to override to and application specific reset actions"
-        pass
-
     def reset(self, request=None):
-        for c in self.components:
-            c.reset(request)
-        self.do_reset(request)
+        self._extension.reset()
         return ""
 
     def _resolve_local_cgi(self, path):
@@ -446,7 +391,7 @@ class Extension():
             return CGI(cgi, headers)
 
     def _resolve_components_cgi(self, path):
-        for c in self.components:
+        for c in self._extension.components:
             cgi = c.get_cgi(path)
             if cgi is not None:
                 return cgi
@@ -457,12 +402,22 @@ class Extension():
             return cgi
         return self._resolve_local_cgi(path)
 
+
 class ExtensionBase(Extension):
     """The extension created by a ExtensionDefinition."""
 
-    def __init__(self, definition, name, address=EXTENSION_DEFAULT_ADDRESS, port=EXTENSION_DEFAULT_PORT):
+    def __init__(self, definition):
         self.__components_definition = definition.components
-        super(ExtensionBase, self).__init__(name=name, address=address, port=port)
+        super(ExtensionBase, self).__init__()
 
     def do_init_components(self):
         return [c.create(self) for c in self.__components_definition]
+
+
+class ExtensionServiceBase(ExtensionService):
+    """The extension service created by a ExtensionDefinition."""
+
+    def __init__(self, definition, name, address=EXTENSION_DEFAULT_ADDRESS, port=EXTENSION_DEFAULT_PORT):
+        super(ExtensionServiceBase, self).__init__(extension=ExtensionBase(definition=definition), name=name,
+                                                   address=address, port=port)
+
