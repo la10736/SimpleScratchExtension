@@ -43,31 +43,48 @@ class Slave(Extension):
         self.direction.set(p.direction)
 
 
-class Master(Extension):
+class MasterBase(Extension):
     def __init__(self, base_name, *args, **kwargs):
         super().__init__(base_name + "-Master", *args, **kwargs)
         self.base_name = base_name
+        self._slave = None
+        self._slave_position = Positions()
+
+    @property
+    def slave(self):
+        return self._slave
+
+    @slave.setter
+    def slave(self, value):
+        self._slave = value
+
+    def update(self, x=None, y=None, direction=None):
+        self._slave_position.update(x, y, direction)
+        self.slave.set_new_positions(self._slave_position)
+
+    def do_command(self, x, y, direction):
+        self.update(float(x), float(y), float(direction))
+
+    def do_init_components(self):
+        set_slave_point = CommandFactory(ed=None, name="set_slave_point",
+                                         description="Imposta remoto x=%n y=%n direction=%n").create(self)
+        set_slave_point.do_command = self.do_command
+        return [set_slave_point]
+
+
+class Master(MasterBase):
+    def __init__(self, base_name, *args, **kwargs):
+        super().__init__(base_name, *args, **kwargs)
         self.p = Positions()
         self.f = Positions(1, 1, 1)
         self.r = Positions()
 
-    def _find_slave(self):
-        g = self.group
-        slave_name = self.base_name + "-Slave"
-        for e in g.extensions:
-            if e.name == slave_name:
-                return e
-        raise KeyError("Cannot find slave extension {} in my group".format(slave_name))
-
     def update(self):
         p, r, f = self.p, self.r, self.f
-        new_point = Positions(r.x + (r.x - p.x) * f.x,
-                              r.y + (r.y - p.y) * f.y,
-                              r.direction + (r.direction - p.direction) * f.direction)
-        try:
-            self._find_slave().set_new_positions(new_point)
-        except KeyError:
-            logging.error("No slave extension!")
+        x = r.x + (r.x - p.x) * f.x
+        y = r.y + (r.y - p.y) * f.y
+        direction = r.direction + (r.direction - p.direction) * f.direction
+        super().update(x, y, direction)
 
     def source_do_command(self, x, y, direction):
         self.p.update(float(x), float(y), float(direction))
@@ -94,25 +111,29 @@ class Master(Extension):
         return [source, factors, references]
 
 
-class MirrorFactory(ExtensionFactory):
-    def do_create(self, base_name, port=EXTENSION_DEFAULT_PORT, *args, **kwargs):
-        if port != 0:
-            ports = self.port_generator(port)
-        else:
-            def void():
-                while True:
-                    yield 0
-
-            ports = void()
-        return [Master(base_name=base_name, port=next(ports)),
-                Slave(base_name=base_name, port=next(ports))]
+class MirrorFactorySimple(ExtensionFactory):
+    master = MasterBase
+    slave = Slave
 
     def __init__(self):
         super().__init__("Mirror")
 
+    def do_create(self, base_name, port=EXTENSION_DEFAULT_PORT, *args, **kwargs):
+        ports = self.port_generator(port)
+        s = self.slave(base_name=base_name, port=next(ports))
+        m = self.master(base_name=base_name, port=next(ports))
+        m.slave = s
+        return [m, s]
+
+
+class MirrorFactory(MirrorFactorySimple):
+    master = Master
+
+
 def usage(e=-1):
-    print("""Use {} -h | [host [port]]
+    print("""Use {} -h | -s [host [port]]
     -h      this help
+    -s      Simple: just one master command to set slave point
     host    your ip address where scratch can reach
     port    the master extension port, slave will use port+1 (<0 use default = {}, 0 to leave the
             the SO get a free two)
@@ -132,22 +153,30 @@ def usage(e=-1):
 if __name__ == '__main__':
 
     host = DEFAULT_HOST
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "-h":
-            usage(0)
-        host = sys.argv[1]
+    factory = MirrorFactory
+    pname = sys.argv[0]
+    sys.argv = sys.argv[1:]
+    if len(sys.argv) and sys.argv[0] == "-h":
+        usage(0)
+    if len(sys.argv) and sys.argv[0] == "-s":
+        print("Simple version: just one command to set remote point")
+        factory = MirrorFactorySimple
+        sys.argv = sys.argv[1:]
+    if len(sys.argv):
+        host = sys.argv[0]
         if host.lower() == "guess":
             host = get_local_address("www.google.com")
             if not host:
                 logging.warning("Cannot guess your host [default to {}]: "
-                                "please use {} <your local address>".format(DEFAULT_HOST, sys.args[0]))
+                                "please use {} <your local address>".format(DEFAULT_HOST, pname))
                 host = DEFAULT_HOST
-    if len(sys.argv) > 2:
-        port = int(sys.argv[1])
+        sys.argv = sys.argv[1:]
+    if len(sys.argv):
+        port = int(sys.argv[0])
         if port < 0:
             port = DEFAULT_PORT
 
-    factory = MirrorFactory()
+    factory = factory()
     g = factory.create("test", port=55066)
     for e in g.extensions:
         with open(e.name + ".sed", "w") as f:
