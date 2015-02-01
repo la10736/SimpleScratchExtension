@@ -50,6 +50,17 @@ class TestSensorFactory(unittest.TestCase):
         self.assertIs(s.info, sf)
         self.assertEqual(s.get(), 1345)
 
+    def test_create_do_read(self):
+        """Create a sensor object and set do_read() method"""
+        sf = SF(Mock(), 'test')
+        mock_extension = Mock()
+
+        def do_read():
+            return "goofy"
+
+        s = sf.create(mock_extension, do_read=do_read)
+        self.assertEqual(s.get(), "goofy")
+
 
 class TestSensor(unittest.TestCase):
     """Sensor sono gli elementi base delle estensioni: internamente espongono la funzione di set()
@@ -136,9 +147,20 @@ class TestSensor(unittest.TestCase):
         self.assertIsNone(s.get_cgi("a"))
 
     def test_create(self):
-        self.fail("Shortcut that create a factory and then sensor: It also test"
-                  "that info must be hard ref instead of weak ref."
-                  "Should be a classmethod")
+        mock_e = Mock()
+        s = S.create(mock_e, "sensor")
+        self.assertIs(mock_e, s.extension)
+        self.assertEqual(s.name, "sensor")
+
+        def do_read():
+            return "goofy"
+
+        s = S.create(mock_e, "sensor2", default="S", description="ASD", do_read=do_read)
+        self.assertIs(mock_e, s.extension)
+        self.assertEqual(s.name, "sensor2")
+        self.assertEqual(s.info.default, "S")
+        self.assertEqual(s.description, "ASD")
+        self.assertEqual(s.get(), "goofy")
 
 
 class TestCommandFactory(unittest.TestCase):
@@ -175,11 +197,9 @@ class TestCommandFactory(unittest.TestCase):
         self.assertRaises(ValueError, CF, med, 'test')
 
 
-
     def test_parse_description(self):
         """"return a list of callable functions to convert arguments or names (string) of menu"""
         self.fail("IMPLEMENT")
-
 
     def test__check_description(self):
         self.fail("IMPLEMENT")
@@ -201,6 +221,19 @@ class TestCommandFactory(unittest.TestCase):
         self.assertIsInstance(c, C)
         self.assertIs(c.extension, mock_extension)
         self.assertIs(c.info, cf)
+
+    def test_create_do_command(self):
+        """Create a command object and set do_command(*args) method"""
+        cf = CF(Mock(), 'test')
+        mock_extension = Mock()
+        v = []
+
+        def do_command(*args):
+            v.append(args)
+
+        c = cf.create(mock_extension, do_command=do_command)
+        c.command("minnie", "goofy")
+        self.assertEqual(v[-1], ("minnie", "goofy"))
 
 
 class TestCommand(unittest.TestCase):
@@ -316,18 +349,21 @@ class TestCommand(unittest.TestCase):
         mock_e = Mock()
         c = C.create(mock_e, "control")
         self.assertIs(mock_e, c.extension)
-        self.assertEqual(c.name,"control")
+        self.assertEqual(c.name, "control")
 
-        c = C.create(mock_e, "control2", (1,2,3), description="ASD")
+        v = []
+
+        def do_command(*args):
+            v.append(args)
+
+        c = C.create(mock_e, "control2", (1, 2, 3), description="ASD", do_command=do_command)
         self.assertIs(mock_e, c.extension)
         self.assertEqual(c.name, "control2")
-        self.assertEqual(c.info.default, (1,2,3))
+        self.assertEqual(c.info.default, (1, 2, 3))
         self.assertEqual(c.description, "ASD")
+        c.command("a","b")
+        self.assertEqual(v[-1],("a","b"))
 
-
-        self.fail("Shortcut that create a factory and then sensor: It also test"
-                  "that info must be hard ref instead of weak ref."
-                  "Should be a classmethod")
 
 if __name__ == '__main__':
     unittest.main()

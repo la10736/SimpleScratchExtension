@@ -6,6 +6,13 @@ from scratch.cgi import CGI
 
 __author__ = 'michele'
 
+def extract_arg(arg, kwargs, default=None):
+    v = default
+    if arg in kwargs:
+        v = kwargs[arg]
+        del kwargs[arg]
+    return v
+
 
 class SensorFactory():
     type = "r"  # reporters
@@ -44,7 +51,11 @@ class SensorFactory():
         return [self.type, self.description, self.name]
 
     def create(self, extension, *args, **kwargs):
-        return Sensor(extension, self, *args, **kwargs)
+        do_read = extract_arg("do_read", kwargs)
+        s = Sensor(extension, self, *args, **kwargs)
+        if do_read is not None:
+            s.do_read = do_read
+        return s
 
 
 class Sensor():
@@ -54,6 +65,12 @@ class Sensor():
     Se il sensore implementa il metodo do_read() viene invocato per impostare il vaolre e
     ritornarlo.
     """
+
+    @staticmethod
+    def create(extension, name, default=None, description=None, **kwargs):
+        do_read = extract_arg("do_read", kwargs)
+        factory = SensorFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        return factory.create(extension=extension, do_read=do_read)
 
     def __init__(self, extension, info, value=None):
         self._ex = weakref.ref(extension)
@@ -149,8 +166,12 @@ class CommandFactory():
     def definition(self):
         return [self.type, self.description, self.name] + [d for d in self._default]
 
-    def create(self, extension):
-        return Command(extension, self)
+    def create(self, extension, *args, **kwargs):
+        do_command = extract_arg("do_command", kwargs)
+        c = Command(extension, self, *args, **kwargs)
+        if do_command is not None:
+            c.do_command = do_command
+        return c
 
 
 class Command():
@@ -162,8 +183,9 @@ class Command():
 
     @staticmethod
     def create(extension, name, default=(), description=None, **kwargs):
+        do_command = extract_arg("do_command", kwargs)
         factory = CommandFactory(ed=None, name=name, default=default, description=description, **kwargs)
-        return factory.create(extension=extension)
+        return factory.create(extension=extension,do_command=do_command)
 
     def __init__(self, extension, info):
         self._ex = weakref.ref(extension)

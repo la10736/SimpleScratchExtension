@@ -1,7 +1,7 @@
 import json
 import logging
-from scratch.components import CommandFactory, SensorFactory
-from scratch.extension import ExtensionServiceFactory, Extension, EXTENSION_DEFAULT_PORT, ExtensionService
+from scratch.components import Sensor, Command
+from scratch.extension import Extension, EXTENSION_DEFAULT_PORT, ExtensionService
 from scratch.utils import get_local_address
 import sys
 
@@ -28,9 +28,9 @@ class Positions():
 
 class Slave(Extension):
     def do_init_components(self):
-        self.x = SensorFactory(ed=None, name="x").create(self)
-        self.y = SensorFactory(ed=None, name="y").create(self)
-        self.direction = SensorFactory(ed=None, name="direction").create(self)
+        self.x = Sensor.create(self, name="x")
+        self.y = Sensor.create(self, name="y")
+        self.direction = Sensor.create(self, name="direction")
         return [self.x, self.y, self.direction]
 
     def update(self, x=None, y=None, direction=None):
@@ -62,9 +62,9 @@ class MasterBase(Extension):
         self.update(float(x), float(y), float(direction))
 
     def do_init_components(self):
-        set_slave_point = CommandFactory(ed=None, name="set_slave_point",
-                                         description="Imposta remoto x=%n y=%n direction=%n").create(self)
-        set_slave_point.do_command = self.do_command
+        set_slave_point = Command.create(self, name="set_slave_point",
+                                         description="Imposta remoto x=%n y=%n direction=%n",
+                                         do_command=self.do_command)
         return [set_slave_point]
 
 
@@ -95,17 +95,16 @@ class Master(MasterBase):
         self.update()
 
     def do_init_components(self):
-        source = CommandFactory(ed=None, name="Source",
-                                description="Source x=%n y=%n direction=%n").create(self)
-        source.do_command = self.source_do_command
-        factors = CommandFactory(ed=None, name="Factors",
-                                 description="Reference factors x=%n y=%n direction=%n").create(self)
-        factors.do_command = self.factors_do_command
-        references = CommandFactory(ed=None, name="References",
-                                    description="References x=%n y=%n direction=%n").create(self)
-        references.do_command = self.references_do_command
+        source = Command.create(self, name="Source",
+                                description="Source x=%n y=%n direction=%n",
+                                do_command=self.source_do_command)
+        factors = Command.create(self, name="Factors",
+                                 description="Reference factors x=%n y=%n direction=%n",
+                                 do_command=self.factors_do_command)
+        references = Command.create(self, name="References",
+                                    description="References x=%n y=%n direction=%n",
+                                    do_command=self.references_do_command)
         return [source, factors, references]
-
 
 def create_services(base_name, port=EXTENSION_DEFAULT_PORT, simple=False):
     master = MasterBase if simple else Master
@@ -143,14 +142,14 @@ def usage(e=-1):
 if __name__ == '__main__':
 
     host = DEFAULT_HOST
-    simple = False
+    _simple = False
     pname = sys.argv[0]
     sys.argv = sys.argv[1:]
     if len(sys.argv) and sys.argv[0] == "-h":
         usage(0)
     if len(sys.argv) and sys.argv[0] == "-s":
         print("Simple version: just one command to set remote point")
-        simple = True
+        _simple = True
         sys.argv = sys.argv[1:]
     if len(sys.argv):
         host = sys.argv[0]
@@ -166,7 +165,7 @@ if __name__ == '__main__':
         if port < 0:
             port = DEFAULT_PORT
 
-    services = create_services("test", port=55066, simple=simple)
+    services = create_services("test", port=55066, simple=_simple)
     for s in services:
         with open(s.name + ".sed", "w") as f:
             d = s.description
