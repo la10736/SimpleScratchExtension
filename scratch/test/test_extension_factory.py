@@ -189,6 +189,17 @@ class TestExtensionFactory(unittest.TestCase):
                 break
         self.assertEqual([10,20,30], [i for i in ef.port_generator([10,20,30])])
 
+    def test_extension_port_generator_0_always_0(self):
+        ef = EF("pp")
+        i=0
+        for p in ef.port_generator(0):
+            self.assertEqual(0, p)
+            i += 1
+            if i > 200:
+                break
+        self.assertGreater(i, 200)
+        self.assertEqual(0, p)
+
 
 
 if __name__ == '__main__':

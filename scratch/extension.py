@@ -198,7 +198,8 @@ class ExtensionFactory():
             pass
         while True:
             yield port
-            port += 1
+            if port>0:
+                port += 1
 
     def do_create(self, group_name, *args, **kwargs):
         """ Create a group of extension from the factory. The concrete factory must
