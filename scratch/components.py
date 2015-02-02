@@ -1,3 +1,4 @@
+from builtins import bool
 import logging
 import threading
 import urllib.parse
@@ -68,7 +69,7 @@ class Block():
     def __init__(self, extension, info, value=None):
         self._ex = weakref.ref(extension)
         self._info = info
-        self._value = value if value is not None else info.default
+        self._value = value
         self._lock = threading.Lock()
 
     @property
@@ -95,8 +96,13 @@ class Block():
     def definition(self):
         return self.info.definition
 
-    def reset(self, request=None):
+    def do_reset(self):
+        """Designed to override"""
         pass
+
+    def reset(self):
+        with self._lock:
+            self.do_reset()
 
     def get_cgi(self, path):
         return None
@@ -115,6 +121,10 @@ class Sensor(Block):
         do_read = extract_arg("do_read", kwargs)
         factory = SensorFactory(ed=None, name=name, default=default, description=description, **kwargs)
         return factory.create(extension=extension, do_read=do_read)
+
+    def __init__(self, extension, info, value=None):
+        v = value if value is not None else info.default
+        super(Sensor, self).__init__(extension=extension, info=info, value=v)
 
     def get(self):
         with self._lock:
@@ -231,5 +241,39 @@ class CommandFactory(BlockFactory):
         return super().definition + [d for d in self._default]
 
 
+class Hat(Block):
+    """Hat blocks return True to raise a event. User application should call flag() to
+    raise event or override do_flag() method that return True when want to raise event.
+    """
+    @staticmethod
+    def create(extension, name, description=None, **kwargs):
+        do_flag = extract_arg("do_flag", kwargs)
+        factory = HatFactory(ed=None, name=name, description=description, **kwargs)
+        return factory.create(extension=extension, do_flag=do_flag)
+
+    def __init__(self, extension, info):
+        super().__init__(extension=extension, info=info, value=False)
+
+    @property
+    def state(self):
+        try:
+            return bool(getattr(self, "do_flag")())
+        except AttributeError:
+            pass
+        with self._lock:
+            r = self._value
+            self._value = False
+            return r
+
+    def flag(self):
+        with self._lock:
+            self._value = True
+
+    def do_reset(self):
+        self._value = False
+
 class HatFactory(BlockFactory):
     type = "h"  # hat
+    block_constructor = Hat
+    cb_arg = "do_flag"
+

@@ -4,7 +4,7 @@ import logging
 import threading
 import weakref
 from scratch.cgi import CGI
-from scratch.components import SensorFactory, CommandFactory
+from scratch.components import SensorFactory, CommandFactory, HatFactory
 
 __author__ = 'michele'
 
@@ -98,6 +98,11 @@ class ExtensionDefinition():
         return self._create_and_register(CommandFactory, name=name, default=default, description=description,
                                          **kwargs)
 
+    def add_hat(self, name, description=None, **kwargs):
+        """Create and register a hat description"""
+        return self._create_and_register(HatFactory, name=name, description=description, **kwargs)
+
+
     def get_component_info(self, name):
         return self._components[name]
 
@@ -148,7 +153,9 @@ class Extension():
         self.do_reset()
 
     def poll(self):
-        return {c.name: c.get() for c in self.components if c.type == 'r'}
+        values = {c.name: c.get() for c in self.components if c.type == 'r'}
+        values.update({c.name: c.state for c in self.components if c.type == 'h'})
+        return values
 
     @property
     def block_specs(self):

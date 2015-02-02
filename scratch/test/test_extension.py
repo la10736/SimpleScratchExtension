@@ -6,7 +6,7 @@ from scratch.extension import Extension as E
 from scratch.extension import ExtensionService as ES, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
 from scratch.extension import ExtensionBase as EB
 from scratch.extension import ExtensionServiceBase as EBS
-from scratch.components import CommandFactory, Sensor
+from scratch.components import CommandFactory, Sensor, HatFactory
 
 
 class TestExstensionDefinition(unittest.TestCase):
@@ -142,6 +142,17 @@ class TestExstensionDefinition(unittest.TestCase):
             ed.add_command("dd", ("ss", 3), "wwww", hh="ww")
             mock_cr.assert_called_with(CommandFactory, name="dd", default=("ss", 3), description="wwww", hh="ww")
 
+    def test_add_hat(self):
+        ed = ED("MyName")
+        hat_i = ed.add_hat("alarm")  # return command info
+        self.assertIsNotNone(hat_i)
+        cc = ed.components
+        self.assertEqual(1, len(cc))
+        hi = ed.get_component_info("alarm")
+        self.assertIs(hi, hat_i)
+        with patch.object(ed, "_create_and_register", autospec=True) as mock_cr:
+            ed.add_hat("dd", "wwww", hh="ww")
+            mock_cr.assert_called_with(HatFactory, name="dd", description="wwww", hh="ww")
 
 class TestExtensionBase(unittest.TestCase):
     """Test the extension base object.
@@ -289,6 +300,21 @@ class TestExtension(unittest.TestCase):
         ed.add_sensor("d", value=1)
         e = EB(ed)
         self.assertDictEqual({"s": "S", "d": 1}, e.poll())
+
+        he = ed.add_hat("e")
+        e = EB(ed)
+        self.assertDictEqual({"s": "S", "d": 1, "e": False}, e.poll())
+
+        ed.add_hat("f")
+        e = EB(ed)
+        e.get_component("e").flag()
+        self.assertDictEqual({"s": "S", "d": 1, "e": True, "f": False}, e.poll())
+
+        """Sanity check ... command do nothing"""
+        ed.add_command("g")
+        e = EB(ed)
+        self.assertDictEqual({"s": "S", "d": 1, "e": False, "f": False}, e.poll())
+
 
     @patch("scratch.extension.Extension.components", new_callable=PropertyMock)
     @patch("scratch.extension.Extension.do_reset", autospec=True)

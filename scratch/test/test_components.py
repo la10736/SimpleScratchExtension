@@ -2,7 +2,8 @@ __author__ = 'michele'
 
 import unittest
 from scratch.portability.mock import patch, Mock
-from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF, HatFactory as HF
+from scratch.components import Sensor as S, SensorFactory as SF, \
+    Command as C, CommandFactory as CF, HatFactory as HF, Hat as H
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -129,7 +130,18 @@ class TestSensor(unittest.TestCase):
         s = S(mock_e, mock_sf)
         """just call s.reset()"""
         s.reset()
-        s.reset(Mock())
+
+    @patch("threading.Lock")
+    def test_reset_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock the extension
+        mock_sf = Mock()  # Mock the sensor info
+        s = S(mock_e, mock_sf)
+        """just call s.reset()"""
+        s.reset()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+
 
     def test_do_read_behavior(self):
         mock_e = Mock()  # Mock the extension
@@ -306,7 +318,7 @@ class TestCommand(unittest.TestCase):
         self.assertRaises(TypeError, c.command, "a")
 
     @patch("threading.Lock")
-    def test_command_and_value_syncronize(self, m_lock):
+    def test_command_and_value_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
         mock_cf = Mock()  # Mock the sensor info
@@ -325,7 +337,17 @@ class TestCommand(unittest.TestCase):
         c = C(mock_e, mock_cf)
         """just call c.reset()"""
         c.reset()
-        c.reset(Mock())
+
+    @patch("threading.Lock")
+    def test_reset_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock the extension
+        mock_cf = Mock()  # Mock the command info
+        c = C(mock_e, mock_cf)
+        """just call c.reset()"""
+        c.reset()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
 
     def test_get_cgi(self):
         mock_e = Mock()  # Mock the extension
@@ -394,43 +416,180 @@ class TestHatFactory(unittest.TestCase):
         self.assertEqual(('test', r'test %n test %s nnn %b'), (hf.name, hf.description))
 
 
-    # def test_parse_description(self):
-    #     """"return a list of callable functions to convert arguments or names (string) of menu"""
-    #     self.fail("IMPLEMENT")
-    #
-    # def test__check_description(self):
-    #     self.fail("IMPLEMENT")
-    #
-    # @patch("scratch.components.CommandFactory._check_description", return_value=True)
-    # def test_definition(self, mock_check_description):
-    #     """Give command definition as list to send as JSON object """
-    #     cf = CF(ed=Mock(), name="goofy", default=(1234, "a"), description="donald duck")
-    #     self.assertListEqual([" ", "donald duck", "goofy", 1234, "a"], cf.definition)
-    #     cf = CF(ed=Mock(), name="sss")
-    #     self.assertListEqual([" ", "sss", "sss"], cf.definition)
-    #
-    # def test_create(self):
-    #     """Create the command object"""
-    #     cf = CF(Mock(), 'test')
-    #     mock_extension = Mock()
-    #     self.assertRaises(TypeError, cf.create)
-    #     c = cf.create(mock_extension)
-    #     self.assertIsInstance(c, C)
-    #     self.assertIs(c.extension, mock_extension)
-    #     self.assertIs(c.info, cf)
-    #
-    # def test_create_do_command(self):
-    #     """Create a command object and set do_command(*args) method"""
-    #     cf = CF(Mock(), 'test')
-    #     mock_extension = Mock()
-    #     v = []
-    #
-    #     def do_command(*args):
-    #         v.append(args)
-    #
-    #     c = cf.create(mock_extension, do_command=do_command)
-    #     c.command("minnie", "goofy")
-    #     self.assertEqual(v[-1], ("minnie", "goofy"))
+    def test_definition(self):
+        """Give command definition as list to send as JSON object """
+        hf = HF(ed=Mock(), name="goofy", description="donald duck")
+        self.assertListEqual(["h", "donald duck", "goofy"], hf.definition)
+        hf = HF(ed=Mock(), name="sss")
+        self.assertListEqual(["h", "sss", "sss"], hf.definition)
+
+    def test_create(self):
+        """Create the hat object"""
+        hf = HF(Mock(), 'test')
+        mock_extension = Mock()
+        self.assertRaises(TypeError, hf.create)
+        h = hf.create(mock_extension)
+        self.assertIsInstance(h, H)
+        self.assertIs(h.extension, mock_extension)
+        self.assertIs(h.info, hf)
+
+    def test_create_do_flag(self):
+        """Create a hat object and set do_flag() method (a callback that give True
+        when you want raise the event
+        """
+        hf = HF(Mock(), 'test')
+        mock_extension = Mock()
+        flag = False
+
+        def do_flag(*args):
+            return flag
+
+        h = hf.create(mock_extension, do_flag=do_flag)
+        self.assertEqual(False, h.state)
+        flag = True
+        self.assertEqual(True, h.state)
+        flag = "a"
+        self.assertEqual(True, h.state)
+        flag = ""
+        self.assertEqual(False, h.state)
+
+class TestHat(unittest.TestCase):
+    """Hat blocks return True to raise a event. User application should call flag() to
+    raise event or override do_flag() method that return True when want to raise event.
+    """
+
+    def test_base(self):
+        mock_e = Mock()  # Mock the extension
+        mock_ed = Mock()  # Mock the extension definition
+
+        """Costructor take extension as first argument and SensorFactory as second"""
+        self.assertRaises(TypeError, H)
+        self.assertRaises(TypeError, H, mock_e)
+
+        hf = HF(ed=mock_ed, name="alarm", description="Do alarm")
+        h = H(mock_e, hf)
+        self.assertIs(h.extension, mock_e)
+        self.assertIs(h.info, hf)
+        self.assertFalse(h.state)
+        self.assertEqual('alarm', h.name)
+        self.assertEqual('Do alarm', h.description)
+        self.assertEqual('h', h.type)
+
+        """Check nominal argument and override value"""
+        h = H(info=hf, extension=mock_e)
+        self.assertIs(h.extension, mock_e)
+        self.assertIs(h.info, hf)
+
+    def test_proxy(self):
+        """Check the proxy"""
+        mock_e = Mock()  # Mock the extension
+        mock_hf = Mock()  # Mock the command info
+        h = H(mock_e, mock_hf)
+        self.assertIs(h.type, mock_hf.type)
+        self.assertIs(h.name, mock_hf.name)
+        self.assertIs(h.description, mock_hf.description)
+        self.assertIs(h.definition, mock_hf.definition)
+
+    def test_flag(self):
+        mock_e = Mock()  # Mock the extension
+        mock_hf = Mock()  # Mock the command info
+        h = H(mock_e, mock_hf)
+        self.assertFalse(h.state)
+        h.flag()
+        self.assertTrue(h.state)
+        self.assertFalse(h.state)
+        h.flag()
+        self.assertTrue(h.state)
+        self.assertFalse(h.state)
+
+        v = False
+
+        def flag():
+            return v
+
+        h.do_flag = flag
+        self.assertFalse(h.state)
+        v = True
+        self.assertTrue(h.state)
+        self.assertTrue(h.state)
+        v = False
+        self.assertFalse(h.state)
+        h.flag()
+        self.assertFalse(h.state)
+
+        del h.do_flag
+        self.assertTrue(h.state)
+        self.assertFalse(h.state)
+        h.flag()
+        self.assertTrue(h.state)
+        self.assertFalse(h.state)
+
+    @patch("threading.Lock")
+    def test_flag_and_state_synchronize_do_flag_no(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock the extension
+        mock_hf = Mock()  # Mock the hat info
+        h = H(mock_e, mock_hf)
+        h.flag()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        _ = h.state
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        h.do_flag = lambda:_
+        _ = h.state
+        self.assertFalse(m_lock.__enter__.called)
+        self.assertFalse(m_lock.__exit__.called)
+
+    def test_reset(self):
+        mock_e = Mock()  # Mock the extension
+        mock_hf = Mock()  # Mock the hat info
+        h = H(mock_e, mock_hf)
+        """call h.reset() and check i f flag reset"""
+        h.flag()
+        h.reset()
+        self.assertFalse(h.state)
+
+    @patch("threading.Lock")
+    def test_reset_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock the extension
+        mock_hf = Mock()  # Mock the hat info
+        h = H(mock_e, mock_hf)
+        h.reset()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+
+    def test_get_cgi(self):
+        mock_e = Mock()  # Mock the extension
+        mock_hf = Mock()  # Mock the hat info
+        h = H(mock_e, mock_hf)
+        self.assertIsNone(h.get_cgi("a"))
+
+    def test_create(self):
+        mock_e = Mock()
+        h = H.create(mock_e, "hat")
+        self.assertIs(mock_e, h.extension)
+        self.assertEqual(h.name, "hat")
+
+        v = "goofy"
+
+        def do_flag():
+            return v
+
+        h = H.create(mock_e, "hat2", description="ASD", do_flag=do_flag)
+        self.assertIs(mock_e, h.extension)
+        self.assertEqual(h.name, "hat2")
+        self.assertEqual(h.description, "ASD")
+        self.assertEqual(h.state, True)
+        v = ""
+        self.assertEqual(h.state, False)
+        v = None
+        self.assertEqual(h.state, False)
+        v = True
+        self.assertEqual(h.state, True)
 
 
 
