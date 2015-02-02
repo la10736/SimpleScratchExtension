@@ -2,7 +2,7 @@ __author__ = 'michele'
 
 import unittest
 from scratch.portability.mock import patch, Mock
-from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF
+from scratch.components import Sensor as S, SensorFactory as SF, Command as C, CommandFactory as CF, HatFactory as HF
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -363,6 +363,75 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(c.description, "ASD")
         c.command("a","b")
         self.assertEqual(v[-1],("a","b"))
+
+
+class TestHatFactory(unittest.TestCase):
+    """We are testing the hat descriptors. They define name and description."""
+
+    def test_base(self):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, HF)
+        self.assertRaises(TypeError, HF, med)
+        hf = HF(med, 'test')
+        self.assertIs(med, hf.ed)
+        self.assertEqual('test', hf.name)
+        self.assertEqual('test', hf.description)
+        self.assertEqual('h', hf.type)
+        self.assertDictEqual({}, hf.menu_dict)
+
+        """Check nominal arguments and the other parameters"""
+        hf = HF(description=r'test %n test %s nnn %b', ed=med, name='test',
+                men1=[1, 2, 3], men2=["a", "b", "c"])
+        self.assertIs(med, hf.ed)
+        self.assertEqual(('test', r'test %n test %s nnn %b',
+                          {"men1": [1, 2, 3], "men2": ["a", "b", "c"]}),
+                         (hf.name, hf.description, hf.menu_dict))
+
+        """ed can be None"""
+        hf = HF(None, 'test', description=r'test %n test %s nnn %b')
+        self.assertIsNone(hf.ed)
+        self.assertEqual(('test', r'test %n test %s nnn %b'), (hf.name, hf.description))
+
+
+    # def test_parse_description(self):
+    #     """"return a list of callable functions to convert arguments or names (string) of menu"""
+    #     self.fail("IMPLEMENT")
+    #
+    # def test__check_description(self):
+    #     self.fail("IMPLEMENT")
+    #
+    # @patch("scratch.components.CommandFactory._check_description", return_value=True)
+    # def test_definition(self, mock_check_description):
+    #     """Give command definition as list to send as JSON object """
+    #     cf = CF(ed=Mock(), name="goofy", default=(1234, "a"), description="donald duck")
+    #     self.assertListEqual([" ", "donald duck", "goofy", 1234, "a"], cf.definition)
+    #     cf = CF(ed=Mock(), name="sss")
+    #     self.assertListEqual([" ", "sss", "sss"], cf.definition)
+    #
+    # def test_create(self):
+    #     """Create the command object"""
+    #     cf = CF(Mock(), 'test')
+    #     mock_extension = Mock()
+    #     self.assertRaises(TypeError, cf.create)
+    #     c = cf.create(mock_extension)
+    #     self.assertIsInstance(c, C)
+    #     self.assertIs(c.extension, mock_extension)
+    #     self.assertIs(c.info, cf)
+    #
+    # def test_create_do_command(self):
+    #     """Create a command object and set do_command(*args) method"""
+    #     cf = CF(Mock(), 'test')
+    #     mock_extension = Mock()
+    #     v = []
+    #
+    #     def do_command(*args):
+    #         v.append(args)
+    #
+    #     c = cf.create(mock_extension, do_command=do_command)
+    #     c.command("minnie", "goofy")
+    #     self.assertEqual(v[-1], ("minnie", "goofy"))
+
 
 
 if __name__ == '__main__':

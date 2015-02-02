@@ -20,7 +20,7 @@ class BlockFactory():
     block_constructor = None  # Abstract
     cb_arg = None  # Abstract
 
-    def __init__(self, ed, name, description=None):
+    def __init__(self, ed, name, description=None, **menudict):
         """
         :param ed: The ExtensionDefinition (container)
         :param name: the name of the block
@@ -29,6 +29,7 @@ class BlockFactory():
         """
         self._ed = weakref.ref(ed) if ed is not None else None
         self._name = name
+        self._menu_dict = menudict
         self._description = description if description is not None else self._name
 
     @property
@@ -46,6 +47,11 @@ class BlockFactory():
     @property
     def definition(self):
         return [self.type, self.description, self.name]
+
+    @property
+    def menu_dict(self):
+        return self._menu_dict.copy()
+
 
     def create(self, extension, *args, **kwargs):
         cb = extract_arg(self.cb_arg, kwargs) if self.cb_arg is not None else None
@@ -208,9 +214,8 @@ class CommandFactory(BlockFactory):
         :param kwargs: the menus entry lists
         :return:
         """
-        super().__init__(ed=ed, name=name, description=description)
+        super().__init__(ed=ed, name=name, description=description, **kwargs)
         self._default = default
-        self._menu_dict = kwargs
         if not self._check_description():
             raise ValueError("Wrong description and/or values/menus")
 
@@ -222,13 +227,9 @@ class CommandFactory(BlockFactory):
         return self._default
 
     @property
-    def menu_dict(self):
-        return self._menu_dict.copy()
-
-    @property
     def definition(self):
         return super().definition + [d for d in self._default]
 
 
-class Head():
-    pass
+class HatFactory(BlockFactory):
+    type = "h"  # hat
