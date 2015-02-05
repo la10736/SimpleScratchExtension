@@ -153,8 +153,10 @@ class Extension():
         self.do_reset()
 
     def poll(self):
+        def state_to_str(state):
+            return "true" if state is True else ""
         values = {c.name: c.get() for c in self.components if c.type == 'r'}
-        values.update({c.name: c.state for c in self.components if c.type == 'h'})
+        values.update({c.name: state_to_str(c.state) for c in self.components if c.type == 'h'})
         return values
 
     @property
