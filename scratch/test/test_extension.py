@@ -154,6 +154,7 @@ class TestExstensionDefinition(unittest.TestCase):
             ed.add_hat("dd", "wwww", hh="ww")
             mock_cr.assert_called_with(HatFactory, name="dd", description="wwww", hh="ww")
 
+
 class TestExtensionBase(unittest.TestCase):
     """Test the extension base object.
     """
@@ -315,6 +316,23 @@ class TestExtension(unittest.TestCase):
         e = EB(ed)
         self.assertDictEqual({"s": "S", "d": 1, "e": False, "f": False}, e.poll())
 
+    def test_busy(self):
+        """Return the busy set of all components"""
+        ed = ED("def")
+        ed.add_sensor("s", value="S")  # empty
+        ed.add_sensor("x", value="X")  # empty
+        ed.add_hat("h")  # empty
+        ed.add_command("hh")  # empty
+        ed.add_waiter_command("w")
+        ed.add_waiter_command("ww")
+        e = EB(ed)
+        # empty
+        self.assertSetEqual(set(), e.busy)
+        """Mock Block.busy .> just waiter command call it"""
+        with patch("scratch.components.WaiterCommand.busy", new_callable=PropertyMock) as mock_busy:
+            mock_busy.side_effect = [{123, 456}, {1, 2, 3, 4, 456}]
+            self.assertSetEqual({123, 456, 1, 2, 3, 4}, e.busy)
+
 
     @patch("scratch.extension.Extension.components", new_callable=PropertyMock)
     @patch("scratch.extension.Extension.do_reset", autospec=True)
@@ -379,9 +397,9 @@ class TestExtensionService(unittest.TestCase):
                "extensionPort": es.port,
                "blockSpecs": []
         }
-        m_extension_block_specs.return_value=block_specs
+        m_extension_block_specs.return_value = block_specs
         self.assertDictEqual(res, es.description)
-        block_specs = [Mock(),Mock()]
+        block_specs = [Mock(), Mock()]
         res["blockSpecs"] = block_specs
         m_extension_block_specs.return_value = block_specs
         self.assertDictEqual(res, es.description)
@@ -402,13 +420,27 @@ class TestExtensionService(unittest.TestCase):
                   "per ogni elemento della tupla del nome es uniti con /. Il valore deve essere url"
                   "encoded.")
 
+    def test_busy_render(self):
+        self.assertEqual("", ES.busy_render(set()))
+        busy = {1, 2, 3, 4}
+        r = ES.busy_render(busy)
+        self.assertEquals("_busy ", r[:len("_busy ")])
+        self.assertEquals("\n", r[-1])
+        self.assertSetEqual(busy, {int(e) for e in r[len("_busy "):].split(" ")})
+
+
+    @patch("scratch.extension.Extension.busy", new_callable=PropertyMock)
+    @patch("scratch.extension.ExtensionService.busy_render", return_value="busy_render\n")
     @patch("scratch.extension.Extension.poll")
-    @patch("scratch.extension.ExtensionService.poll_dict_render")
-    def test__poll_cgi(self, mock_poll_dict_render, mock_poll):
+    @patch("scratch.extension.ExtensionService.poll_dict_render", return_value="dict_render\n")
+    def test__poll_cgi(self, mock_poll_dict_render, mock_poll, mock_busy_render, mock_busy):
         es = ES(E(), "MyName")
-        self.assertIs(es._poll_cgi(Mock(autospec=ES.HTTPHandler)), mock_poll_dict_render.return_value)
+        self.assertEqual(es._poll_cgi(Mock(autospec=ES.HTTPHandler)), mock_poll_dict_render.return_value +
+                      mock_busy_render.return_value)
         self.assertTrue(mock_poll.called)
         mock_poll_dict_render.assert_called_with(mock_poll.return_value)
+        self.assertTrue(mock_busy.called)
+        mock_busy_render.assert_called_with(mock_busy.return_value)
 
     @patch("threading.Thread", autospec=True)
     def test_start(self, mock_thread):
@@ -466,10 +498,13 @@ class TestExtensionService(unittest.TestCase):
     def test_reset(self):
         """Must call reset() for each component, do_reset() (method designed to
         override and return "" """
+
         class Ex(E):
             reset_call = False
+
             def reset(self):
                 Ex.reset_call = True
+
         es = ES(Ex(), "MyName")
         self.assertFalse(Ex.reset_call)
         self.assertEqual("", es.reset(Mock()))

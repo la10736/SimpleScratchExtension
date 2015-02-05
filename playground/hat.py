@@ -17,7 +17,7 @@ class ExtensionHat(Extension):
 if __name__ == "__main__":
     e = ExtensionHat()
     es = ExtensionService(e, "Hat Test", port=DEFAULT_PORT)
-    with open(es.name + "hat_test.sed", "w") as f:
+    with open("hat_test.sed", "w") as f:
         d = es.description
         d["host"] = DEFAULT_HOST
         json.dump(d, fp=f)

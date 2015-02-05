@@ -4,7 +4,7 @@ import logging
 import threading
 import weakref
 from scratch.cgi import CGI
-from scratch.components import SensorFactory, CommandFactory, HatFactory
+from scratch.components import SensorFactory, CommandFactory, HatFactory, WaiterCommandFactory
 
 __author__ = 'michele'
 
@@ -98,6 +98,11 @@ class ExtensionDefinition():
         return self._create_and_register(CommandFactory, name=name, default=default, description=description,
                                          **kwargs)
 
+    def add_waiter_command(self, name, default=(), description=None, **kwargs):
+        """Create and register a waiter command description"""
+        return self._create_and_register(WaiterCommandFactory, name=name, default=default, description=description,
+                                         **kwargs)
+
     def add_hat(self, name, description=None, **kwargs):
         """Create and register a hat description"""
         return self._create_and_register(HatFactory, name=name, description=description, **kwargs)
@@ -155,9 +160,17 @@ class Extension():
     def poll(self):
         def state_to_str(state):
             return "true" if state is True else ""
+
         values = {c.name: c.get() for c in self.components if c.type == 'r'}
         values.update({c.name: state_to_str(c.state) for c in self.components if c.type == 'h'})
         return values
+
+    @property
+    def busy(self):
+        busy = set()
+        for c in self.components:
+            busy.update(c.busy)
+        return busy
 
     @property
     def block_specs(self):
@@ -289,7 +302,7 @@ class ExtensionService():
         return ret
 
     def _poll_cgi(self, handler):
-        return self.poll_dict_render(self._extension.poll())
+        return self.poll_dict_render(self._extension.poll()) + self.busy_render(self._extension.busy)
 
     @staticmethod
     def poll_dict_render(vals):
@@ -297,6 +310,12 @@ class ExtensionService():
         for v, k in vals.items():
             sio.write('%s %s\n' % (v, str(k)))
         return sio.getvalue()
+
+    @staticmethod
+    def busy_render(vals):
+        if not vals:
+            return ""
+        return "_busy " + " ".join([str(v) for v in vals]) + "\n"
 
     def _crossdomain_xml(self, request):
         return """<cross-domain-policy>

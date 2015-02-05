@@ -71,6 +71,7 @@ class Block():
         self._info = info
         self._value = value
         self._lock = threading.Lock()
+        self._busy = set()
 
     @property
     def extension(self):
@@ -96,8 +97,29 @@ class Block():
     def definition(self):
         return self.info.definition
 
+    @property
+    def busy(self):
+        with self._lock:
+            return self._busy.copy()
+
+    def _busy_add(self, busy):
+        with self._lock:
+            self._busy.add(busy)
+
+    def _busy_remove(self, busy):
+        with self._lock:
+            self._busy.discard(busy)
+
+    def _busy_clean_unlocked(self):
+        self._busy = set()
+
+    def _busy_clean(self):
+        with self._lock:
+            self._busy_clean_unlocked()
+
     def do_reset(self):
-        """Designed to override"""
+        """Designed to override. Pay attention here you are in lock context: you just do your reset busness
+         and don't touch block object."""
         pass
 
     def reset(self):
@@ -199,13 +221,24 @@ class Command(Block):
 
     def _cgi(self, request):
         _name, args = self._get_request_data(request.path)
+        args = self._check_command_argument(*args)
         self.command(*args)
         return ""
+
+    def _check_command_argument(self, *args):
+        """ Base implementation: no cheks
+
+        :return: None if wrong elese the arguments tuple
+        """
+        return args
 
     def get_cgi(self, path):
         if not path.startswith("/"):
             return None
-        name, _args = self._get_request_data(path)
+        name, args = self._get_request_data(path)
+        args = self._check_command_argument(*args)
+        if args is None:
+            return None
         if name == self.name:
             return CGI(self._cgi)
 
@@ -245,6 +278,7 @@ class Hat(Block):
     """Hat blocks return True to raise a event. User application should call flag() to
     raise event or override do_flag() method that return True when want to raise event.
     """
+
     @staticmethod
     def create(extension, name, description=None, **kwargs):
         do_flag = extract_arg("do_flag", kwargs)
@@ -269,11 +303,62 @@ class Hat(Block):
         with self._lock:
             self._value = True
 
-    def do_reset(self):
-        self._value = False
+    def reset(self):
+        with self._lock:
+            self._value = False
+            self.do_reset()
+
 
 class HatFactory(BlockFactory):
     type = "h"  # hat
     block_constructor = Hat
     cb_arg = "do_flag"
 
+
+class WaiterCommand(Command):
+
+    @staticmethod
+    def create(extension, name, default=(), description=None, **kwargs):
+        do_command = extract_arg("do_command", kwargs)
+        factory = WaiterCommandFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        return factory.create(extension=extension, do_command=do_command)
+
+    def execute_busy_command(self, busy, *args):
+        try:
+            self.do_command(*args)
+        finally:
+            self._busy_remove(busy)
+
+    def command(self, busy, *args):
+        logging.info("waiter command {} = {}".format(self.name, args))
+        if hasattr(self, "do_command"):
+            t = threading.Thread(name="Command {} [{}] execution".format(self.name, busy), target=self.execute_busy_command,
+                                 args=(busy,) + args)
+            t.setDaemon(True)
+            self._busy.add(busy)
+            t.start()
+        with self._lock:
+            self._value = args
+
+    def reset(self):
+        with self._lock:
+            self._busy_clean_unlocked()
+            self.do_reset()
+
+    def _check_command_argument(self, *args):
+        """ Base implementation : should be at least one integer
+
+        :return: None if wrong else the arguments tuple
+        """
+        if not len(args):
+            return None
+        try:
+            args = [a for a in args]
+            args[0] = int(args[0])
+        except ValueError:
+            return None
+        return args
+
+class WaiterCommandFactory(CommandFactory):
+    type = "w"  # blocking commands
+    block_constructor = WaiterCommand

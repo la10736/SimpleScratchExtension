@@ -1,9 +1,12 @@
+from mock import ANY
+
 __author__ = 'michele'
 
 import unittest
 from scratch.portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, \
-    Command as C, CommandFactory as CF, HatFactory as HF, Hat as H
+    Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
+    WaiterCommand as W, WaiterCommandFactory as WF
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -258,7 +261,7 @@ class TestCommand(unittest.TestCase):
         mock_e = Mock()  # Mock the extension
         mock_ed = Mock()  # Mock the extension definition
 
-        """Costructor take extension as first argument and SensorFactory as second"""
+        """Costructor take extension as first argument and CommandFactory as second"""
         self.assertRaises(TypeError, C)
         self.assertRaises(TypeError, C, mock_e)
 
@@ -383,8 +386,8 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(c.name, "control2")
         self.assertEqual(c.info.default, (1, 2, 3))
         self.assertEqual(c.description, "ASD")
-        c.command("a","b")
-        self.assertEqual(v[-1],("a","b"))
+        c.command("a", "b")
+        self.assertEqual(v[-1], ("a", "b"))
 
 
 class TestHatFactory(unittest.TestCase):
@@ -452,6 +455,7 @@ class TestHatFactory(unittest.TestCase):
         self.assertEqual(True, h.state)
         flag = ""
         self.assertEqual(False, h.state)
+
 
 class TestHat(unittest.TestCase):
     """Hat blocks return True to raise a event. User application should call flag() to
@@ -538,7 +542,7 @@ class TestHat(unittest.TestCase):
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
         m_lock.reset_mock()
-        h.do_flag = lambda:_
+        h.do_flag = lambda: _
         _ = h.state
         self.assertFalse(m_lock.__enter__.called)
         self.assertFalse(m_lock.__exit__.called)
@@ -591,6 +595,225 @@ class TestHat(unittest.TestCase):
         v = True
         self.assertEqual(h.state, True)
 
+
+class TestWaiterCommandFactory(unittest.TestCase):
+    """We are testing the commands that can wait descriptors. They define name and description."""
+
+    @patch("scratch.components.WaiterCommandFactory._check_description", return_value=True)
+    def test_base(self, mock_check_description):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, WF)
+        self.assertRaises(TypeError, WF, med)
+        wf = WF(med, 'test')
+        self.assertIs(med, wf.ed)
+        self.assertEqual('test', wf.name)
+        self.assertEqual('test', wf.description)
+        self.assertEqual((), wf.default)
+        self.assertEqual('w', wf.type)
+        self.assertDictEqual({}, wf.menu_dict)
+
+    def test_is_a_CommandFactory_instance(self):
+        wf = WF(Mock(), 'test')
+        self.assertIsInstance(wf, CF)
+
+    def test_create(self):
+        """Create the waiter command object"""
+        wf = WF(Mock(), 'test')
+        mock_extension = Mock()
+        self.assertRaises(TypeError, wf.create)
+        w = wf.create(mock_extension)
+        self.assertIsInstance(w, W)
+        self.assertIs(w.extension, mock_extension)
+        self.assertIs(w.info, wf)
+
+
+class TestWaiterCommand(unittest.TestCase):
+    """Waiter command components perform asynchronous command. User application should override
+    the method do_command(*args) to do the real work, the library will run in a new thread and
+    take care of put it in busy state until ends. For general behaviour look Command
+    """
+
+    def test_base(self):
+        mock_e = Mock()  # Mock the extension
+        mock_ed = Mock()  # Mock the extension definition
+
+        """Costructor take extension as first argument and WaiterCommandFactory as second"""
+        self.assertRaises(TypeError, W)
+        self.assertRaises(TypeError, W, mock_e)
+
+        wf = WF(ed=mock_ed, name="beep", description="Say BEEP and wait")
+        w = W(mock_e, wf)
+        self.assertIs(w.extension, mock_e)
+        self.assertIs(w.info, wf)
+        self.assertIsNone(w.value)
+        self.assertEqual('beep', w.name)
+        self.assertEqual('Say BEEP and wait', w.description)
+        self.assertEqual('w', w.type)
+
+    def test_is_Command_subclass(self):
+        mock_e = Mock()  # Mock the extension
+        mock_cf = Mock()  # Mock the command info
+        w = W(mock_e, mock_cf)
+        self.assertIsInstance(w, C)
+
+    def test_execute_busy_command(self):
+        """Remove the busy argument even if there is an exception
+        """
+        mock_e = Mock()  # Mock the extension
+        mock_cf = Mock()  # Mock the command info
+        w = W(mock_e, mock_cf)
+        busy = 12345
+        self.assertFalse(w.busy)
+        w._busy.add(busy)
+
+        def do_command(a, b):
+            self.assertIn(busy, w.busy)
+            self.assertEqual(a, "a")
+            self.assertEqual(b, "b")
+
+        w.do_command = do_command
+        w.execute_busy_command(busy, "a", "b")
+        self.assertFalse(w.busy)
+
+        """Work even busy is not in bust set"""
+
+        def do_command(a, b):
+            pass
+
+        w.do_command = do_command
+        w.execute_busy_command(busy, "a", "b")
+        self.assertFalse(w.busy)
+
+        w._busy.add(busy)
+
+        def do_command(a, b):
+            self.assertIn(busy, w.busy)
+            raise Exception()
+
+        w.do_command = do_command
+        self.assertRaises(Exception, w.execute_busy_command, busy, "a", "b")
+        self.assertFalse(w.busy)
+
+    def test_command_start_thread_to_execute_execute_busy_command(self):
+        """Add busy, create thread with execute_busy_command target, set daemon to True and start thread.
+
+        Only if extension implement do_command()
+        """
+        mock_e = Mock()  # Mock the extension
+        mock_cf = Mock()  # Mock the command info
+        w = W(mock_e, mock_cf)
+        busy = 12345
+        w.do_command = Mock()
+        with patch("threading.Thread", autospec=True) as mock_thread_class:
+            mock_thread = mock_thread_class.return_value
+            w.command(busy, "a")
+            self.assertIn(busy, w._busy)
+            mock_thread_class.assert_called_with(name=ANY, target=w.execute_busy_command, args=(busy, "a"))
+            mock_thread.setDaemon.assert_called_with(True)
+            self.assertTrue(mock_thread.start.called)
+        """Sanity chack without mocks"""
+        w.command(busy, "a")
+
+        """Without do_command"""
+        del w.do_command
+        with patch("threading.Thread", autospec=True) as mock_thread_class:
+            w.command(busy, "a")
+            self.assertFalse(mock_thread_class.called)
+        """Sanity chack without mocks"""
+        w.command(busy, "a")
+
+    @patch("threading.Lock")
+    def test_busy_access_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock the extension
+        mock_cf = Mock()  # Mock the sensor info
+        w = W(mock_e, mock_cf)
+        w.busy
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+
+        def do_command():
+            # Check busy add
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+            m_lock.reset_mock()
+
+        w.do_command = do_command
+        w.command(1234)
+
+        def do_command():
+            pass
+
+        w.do_command = do_command
+        m_lock.reset_mock()
+        w.execute_busy_command(1234)
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+
+    def test_reset(self):
+        """Should reset busy set"""
+        mock_e = Mock()  # Mock the extension
+        mock_cf = Mock()  # Mock the sensor info
+        w = W(mock_e, mock_cf)
+        w._busy_add(1234)
+        w._busy_add(2234)
+        w._busy_add(3234)
+        self.assertSetEqual(w.busy, {1234, 2234, 3234})
+        w.reset()
+        self.assertSetEqual(w.busy, set())
+
+        with patch("threading.Lock") as m_lock:
+            m_lock = m_lock.return_value
+            """Must rebuild to hane the mock"""
+            w = W(mock_e, mock_cf)
+            w.reset()
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+
+    def test_get_cgi(self):
+        mock_e = Mock()  # Mock the extension
+        mock_wf = Mock()  # Mock the waiter command info
+        mock_wf.name = "My Name"
+        w = W(mock_e, mock_wf)
+        self.assertIsNone(w.get_cgi("not your cgi"))
+        self.assertIsNone(w.get_cgi("My%20Name"))
+        """Must start by / and contain at least one argument : busy"""
+        self.assertIsNone(w.get_cgi("/My%20Name"))
+        """The first must be integer"""
+        self.assertIsNone(w.get_cgi("/My%20Name/mybusy"))
+        cgi = w.get_cgi("/My%20Name/1234")
+        self.assertIsNotNone(cgi)
+        self.assertEqual({}, cgi.headers)
+        with patch.object(w, "command", autospec=True) as mock_command:
+            self.assertEqual("", cgi(Mock(path="My%20Name/3452")))
+            mock_command.assert_called_with(3452)
+            mock_command.reset_mock
+            self.assertEqual("", cgi(Mock(path="My%20Name/54321/b/c%20d/1234")))
+            mock_command.assert_called_with(54321, "b", "c d", "1234")
+
+    def test_create(self):
+        mock_e = Mock()
+        w = W.create(mock_e, "control")
+        self.assertIsInstance(w, W)
+        self.assertIs(mock_e, w.extension)
+        self.assertEqual(w.name, "control")
+        self.assertEqual(w.type, "w")
+
+        v = []
+
+        def do_command(*args):
+            v.append(args)
+
+        w = W.create(mock_e, "control2", (1, 2, 3), description="ASD", do_command=do_command)
+        self.assertIsInstance(w, W)
+        self.assertIs(mock_e, w.extension)
+        self.assertEqual(w.name, "control2")
+        self.assertEqual(w.info.default, (1, 2, 3))
+        self.assertEqual(w.description, "ASD")
+        w.command("a", "b")
+        self.assertEqual(v[-1], ("b",))
 
 
 if __name__ == '__main__':
