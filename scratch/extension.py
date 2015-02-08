@@ -1,15 +1,18 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import io
 import logging
+from socketserver import ThreadingMixIn
 import threading
 import weakref
 from scratch.cgi import CGI
-from scratch.components import SensorFactory, CommandFactory, HatFactory, WaiterCommandFactory
+from scratch.components import SensorFactory, CommandFactory, HatFactory, WaiterCommandFactory, RequesterFactory
 
 __author__ = 'michele'
 
 EXTENSION_DEFAULT_ADDRESS = "0.0.0.0"
 EXTENSION_DEFAULT_PORT = 0
+
+DEFAULT_QUEUE_SIZE = 10
 
 
 class ExtensionDefinition():
@@ -107,6 +110,9 @@ class ExtensionDefinition():
         """Create and register a hat description"""
         return self._create_and_register(HatFactory, name=name, description=description, **kwargs)
 
+    def add_requester(self, name, value="", description=None):
+        """Create and register a requester description"""
+        return self._create_and_register(RequesterFactory, name=name, default=value, description=description)
 
     def get_component_info(self, name):
         return self._components[name]
@@ -158,11 +164,9 @@ class Extension():
         self.do_reset()
 
     def poll(self):
-        def state_to_str(state):
-            return "true" if state is True else ""
-
-        values = {c.name: c.get() for c in self.components if c.type == 'r'}
-        values.update({c.name: state_to_str(c.state) for c in self.components if c.type == 'h'})
+        values = {}
+        for c in self.components:
+            values.update(c.poll())
         return values
 
     @property
@@ -171,11 +175,31 @@ class Extension():
         for c in self.components:
             busy.update(c.busy)
         return busy
+    
+    @property
+    def results(self):
+        results = []
+        problems = []
+        for c in self.components:
+            try:
+                rs = c.get_results()
+            except AttributeError:
+                pass
+            else:
+                for busy, v, exception in rs:
+                    results.append((busy, v))
+                    if exception is not None:
+                        problems.append("[{}] : {}".format(c.name,str(exception)))
+        return results, problems
 
     @property
     def block_specs(self):
         return [c.definition for c in self.components]
 
+class _BaseHttpMultithreadServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+    request_queue_size = DEFAULT_QUEUE_SIZE
 
 class ExtensionService():
     """The extension service: create by a Extension object it binds the server that respond to
@@ -252,7 +276,7 @@ class ExtensionService():
         self._address = address
         self._port = port
         self._server_thread = None
-        self._http = HTTPServer((address, port), ExtensionService.HTTPHandler)
+        self._http = _BaseHttpMultithreadServer((address, port), ExtensionService.HTTPHandler)
         self._http._context = weakref.ref(self)
         self._cgi_map = {"/poll": {"cgi": "_poll_cgi"},
                          "/crossdomain.xml": {"cgi": "_crossdomain_xml",

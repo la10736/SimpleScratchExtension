@@ -1,3 +1,8 @@
+import http
+import socketserver
+import time
+import scratch
+
 __author__ = 'michele'
 import unittest
 from scratch.portability.mock import patch, Mock, PropertyMock, MagicMock
@@ -154,6 +159,15 @@ class TestExstensionDefinition(unittest.TestCase):
             ed.add_hat("dd", "wwww", hh="ww")
             mock_cr.assert_called_with(HatFactory, name="dd", description="wwww", hh="ww")
 
+    def test_add_requester(self):
+        ed = ED("MyName")
+        ri = ed.add_requester("request")  # return requester info
+        self.assertIsNotNone(ri)
+        cc = ed.components
+        self.assertEqual(1, len(cc))
+        ci = ed.get_component_info("request")
+        self.assertIs(ci, ri)
+
 
 class TestExtensionBase(unittest.TestCase):
     """Test the extension base object.
@@ -215,7 +229,6 @@ class TestExtension(unittest.TestCase):
 
     @patch("scratch.extension.Extension._init_components")
     def test_base(self, mock_init_components):
-
         e = E()
         self.assertIsNotNone(e)
         mock_init_components.assert_called_with()
@@ -294,27 +307,23 @@ class TestExtension(unittest.TestCase):
         e = EB(ed)
         self.assertDictEqual({}, e.poll())
 
-        ed.add_sensor("s", value="S")
+        ed.add_sensor("s0", value="S")
         e = EB(ed)
-        self.assertDictEqual({"s": "S"}, e.poll())
+        self.assertDictEqual({"s0": "S"}, e.poll())
 
-        ed.add_sensor("d", value=1)
+        ed.add_sensor("s1", value=1)
         e = EB(ed)
-        self.assertDictEqual({"s": "S", "d": 1}, e.poll())
+        self.assertDictEqual({"s0": "S", "s1": 1}, e.poll())
 
-        he = ed.add_hat("e")
+        """SAnity chack"""
+        """hat, command and waitercommand ... no contribution """
+        h = ed.add_hat("x0")
+        c = ed.add_command("x1")
+        w = ed.add_waiter_command("x2")
+        ed.add_requester("R0", value=12)
+        ed.add_requester("R1", value="AA")
         e = EB(ed)
-        self.assertDictEqual({"s": "S", "d": 1, "e": False}, e.poll())
-
-        ed.add_hat("f")
-        e = EB(ed)
-        e.get_component("e").flag()
-        self.assertDictEqual({"s": "S", "d": 1, "e": True, "f": False}, e.poll())
-
-        """Sanity check ... command do nothing"""
-        ed.add_command("g")
-        e = EB(ed)
-        self.assertDictEqual({"s": "S", "d": 1, "e": False, "f": False}, e.poll())
+        self.assertDictEqual({"s0": "S", "s1": 1}, e.poll())
 
     def test_busy(self):
         """Return the busy set of all components"""
@@ -333,19 +342,66 @@ class TestExtension(unittest.TestCase):
             mock_busy.side_effect = [{123, 456}, {1, 2, 3, 4, 456}]
             self.assertSetEqual({123, 456, 1, 2, 3, 4}, e.busy)
 
+    def test_results(self):
+        """Returns a tuple of results list a problems"""
+        ed = ED("def")
 
-    @patch("scratch.extension.Extension.components", new_callable=PropertyMock)
-    @patch("scratch.extension.Extension.do_reset", autospec=True)
-    def test_reset(self, mock_do_reset, mock_components):
-        """Must call reset() for each component, do_reset() (method designed to
-        override)"""
-        e = E()
-        components = [Mock() for _ in range(5)]
-        mock_components.return_value = components
-        e.reset()
-        for m in components:
-            m.reset.assert_called_with()
-        mock_do_reset.assert_called_with(e)
+        e = EB(ed)
+        self.assertEqual(([], []), e.results)
+
+        ed.add_requester("R0", value=12)
+        ed.add_requester("R1", value="AA")
+        e = EB(ed)
+
+        self.assertEqual(([], []), e.results)
+
+        r0, r1 = e.get_component("R0"), e.get_component("R1")
+        r0.get_async(123)
+        r0.get_async(321)
+        r1.get_async(23)
+        r1.get_async(21)
+        r0.set("a")
+        r1.set("b")
+        res,prb=e.results
+        self.assertSetEqual({(123,"a"),(321,"a"),(23,"b"),(21,"b")}, set(res))
+        self.assertFalse(prb)
+        """add a problem"""
+        def do_read():
+            raise Exception("problem")
+        r0.do_read = do_read
+        r0.get_async(333)
+        time.sleep(0.01)
+        self.assertEqual((
+            [(333,"invalid")],
+            ["[R0] : problem"]), e.results)
+
+
+
+        """SAnity chack"""
+        """hat, command and waitercommand ... no contribution """
+        ed.add_sensor("s0", value="S")
+        ed.add_sensor("s1", value=1)
+        ed.add_hat("x0")
+        ed.add_command("x1")
+        ed.add_waiter_command("x2")
+        e = EB(ed)
+        self.assertDictEqual({"s0": "S", "s1": 1}, e.poll())
+        e.results
+
+
+
+@patch("scratch.extension.Extension.components", new_callable=PropertyMock)
+@patch("scratch.extension.Extension.do_reset", autospec=True)
+def test_reset(self, mock_do_reset, mock_components):
+    """Must call reset() for each component, do_reset() (method designed to
+    override)"""
+    e = E()
+    components = [Mock() for _ in range(5)]
+    mock_components.return_value = components
+    e.reset()
+    for m in components:
+        m.reset.assert_called_with()
+    mock_do_reset.assert_called_with(e)
 
 
 class TestExtensionService(unittest.TestCase):
@@ -357,7 +413,7 @@ class TestExtensionService(unittest.TestCase):
         ES._unregister_all()
         ED._unregister_all()
 
-    @patch("scratch.extension.HTTPServer")
+    @patch("scratch.extension._BaseHttpMultithreadServer")
     def test_base(self, mock_httpserver):
         """Costructor need just name"""
         self.assertRaises(TypeError, ES)
@@ -371,6 +427,15 @@ class TestExtensionService(unittest.TestCase):
         es = ES(E(), port=31223, address="1.2.3.4", name="donald duck")
         self.assertEqual("donald duck", es.name)
         mock_httpserver.assert_called_with(("1.2.3.4", 31223), ES.HTTPHandler)
+
+    def test_http_conf(self):
+        s = scratch.extension._BaseHttpMultithreadServer(("127.0.0.1", 33445),
+                                                         ES.HTTPHandler)
+        self.assertIsInstance(s, socketserver.ThreadingMixIn)
+        self.assertIsInstance(s, http.server.HTTPServer)
+        self.assertTrue(s.daemon_threads)
+        self.assertTrue(s.allow_reuse_address)
+
 
     def test_name(self):
         """Must be unique"""
@@ -428,6 +493,11 @@ class TestExtensionService(unittest.TestCase):
         self.assertEquals("\n", r[-1])
         self.assertSetEqual(busy, {int(e) for e in r[len("_busy "):].split(" ")})
 
+    def test_results_render(self):
+        self.fail("IMPLEMENT")
+
+    def test_problems_render(self):
+        self.fail("IMPLEMENT")
 
     @patch("scratch.extension.Extension.busy", new_callable=PropertyMock)
     @patch("scratch.extension.ExtensionService.busy_render", return_value="busy_render\n")
@@ -436,11 +506,12 @@ class TestExtensionService(unittest.TestCase):
     def test__poll_cgi(self, mock_poll_dict_render, mock_poll, mock_busy_render, mock_busy):
         es = ES(E(), "MyName")
         self.assertEqual(es._poll_cgi(Mock(autospec=ES.HTTPHandler)), mock_poll_dict_render.return_value +
-                      mock_busy_render.return_value)
+                         mock_busy_render.return_value)
         self.assertTrue(mock_poll.called)
         mock_poll_dict_render.assert_called_with(mock_poll.return_value)
         self.assertTrue(mock_busy.called)
         mock_busy_render.assert_called_with(mock_busy.return_value)
+        self.fail("Add results and problems")
 
     @patch("threading.Thread", autospec=True)
     def test_start(self, mock_thread):

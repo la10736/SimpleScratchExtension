@@ -43,3 +43,12 @@ che si vuole e aggiungere i propri.
 - ExtensionService: Sono quelle che fanno i lavoro. Nel caso l'estensione da scrivere non usa solo
 componenti base (con opportune implementazioni) ma ha anche una logica di alto livello e' necessario
 sovrascrivere questa classe o implementare una logica che la pilota.
+
+
+
+Aprire i ticket su scratch
+
+1) Due richieste di reporter bloccanti -> dead lock
+2) Sostenere i booleani bloccanti #575
+3) Proporre implementazione hat come booleani bloccanti (#233)
+4) Forum http://scratch.mit.edu/discuss/32/

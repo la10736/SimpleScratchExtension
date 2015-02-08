@@ -1,4 +1,5 @@
-from mock import ANY
+import threading
+from mock import ANY, DEFAULT, call
 
 __author__ = 'michele'
 
@@ -6,7 +7,8 @@ import unittest
 from scratch.portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, \
     Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
-    WaiterCommand as W, WaiterCommandFactory as WF
+    WaiterCommand as W, WaiterCommandFactory as WF, Requester as R, \
+    RequesterFactory as RF
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -84,14 +86,14 @@ class TestSensor(unittest.TestCase):
         self.assertIs(s.info, sf)
         self.assertEqual('speed', s.name)
         self.assertEqual('The Speed', s.description)
-        self.assertEqual(10, s.get())
+        self.assertEqual(10, s.value)
         self.assertEqual('r', s.type)
 
         """Check nominal argument and override value"""
         s = S(info=sf, value=13, extension=mock_e)
         self.assertIs(s.extension, mock_e)
         self.assertIs(s.info, sf)
-        self.assertEqual(13, s.get())
+        self.assertEqual(13, s.value)
 
     def test_proxy(self):
         """Check the proxy"""
@@ -113,8 +115,8 @@ class TestSensor(unittest.TestCase):
         s.set("hi")
         self.assertEqual("hi", s.get())
 
-    @patch("threading.Lock")
-    def test_get_and_set_syncronize(self, m_lock):
+    @patch("threading.RLock")
+    def test_get_and_set_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
         mock_sf = Mock()  # Mock the sensor info
@@ -127,6 +129,45 @@ class TestSensor(unittest.TestCase):
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
 
+    def test_value(self):
+        """1) return last computed value
+           2) synchronize
+        """
+        mock_e = Mock()  # Mock the extension
+        mock_sf = Mock()  # Mock the sensor info
+        v = 0
+
+        def get():
+            return v
+
+        s = S(mock_e, mock_sf, value=56)
+        s.do_read = get
+
+        self.assertEqual(56, s.value)
+        s.get()
+        self.assertEqual(0, s.value)
+        v = 12
+        self.assertEqual(0, s.value)
+        s.get()
+        self.assertEqual(12, s.value)
+        s.set(32)
+        self.assertEqual(32, s.value)
+        self.assertEqual(32, s.value)
+        s.get()
+        self.assertEqual(12, s.value)
+
+        with patch("threading.RLock") as m_lock:
+            m_lock = m_lock.return_value
+            """We must rebuild s to mock lock"""
+            s = S(mock_e, mock_sf, value=56)
+            s.value
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+            m_lock.reset_mock()
+            s._set_value(32)
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+
     def test_reset(self):
         mock_e = Mock()  # Mock the extension
         mock_sf = Mock()  # Mock the sensor info
@@ -134,7 +175,7 @@ class TestSensor(unittest.TestCase):
         """just call s.reset()"""
         s.reset()
 
-    @patch("threading.Lock")
+    @patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
@@ -177,6 +218,18 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.description, "ASD")
         self.assertEqual(s.get(), "goofy")
 
+    def test_poll(self):
+        v = 41
+
+        def r():
+            return v
+
+        mock_e = Mock()
+        s = S.create(mock_e, "sensor", do_read=r)
+        self.assertDictEqual({"sensor": v}, s.poll())
+        v = 13
+        self.assertDictEqual({"sensor": v}, s.poll())
+
 
 class TestCommandFactory(unittest.TestCase):
     """We are testing the commands descriptors. They define name and description."""
@@ -212,10 +265,12 @@ class TestCommandFactory(unittest.TestCase):
         self.assertRaises(ValueError, CF, med, 'test')
 
 
+    @unittest.skip("Not Implementetd yet")
     def test_parse_description(self):
         """"return a list of callable functions to convert arguments or names (string) of menu"""
         self.fail("IMPLEMENT")
 
+    @unittest.skip("Not Implementetd yet")
     def test__check_description(self):
         self.fail("IMPLEMENT")
 
@@ -320,7 +375,7 @@ class TestCommand(unittest.TestCase):
         c.command()
         self.assertRaises(TypeError, c.command, "a")
 
-    @patch("threading.Lock")
+    @patch("threading.RLock")
     def test_command_and_value_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
@@ -341,7 +396,7 @@ class TestCommand(unittest.TestCase):
         """just call c.reset()"""
         c.reset()
 
-    @patch("threading.Lock")
+    @patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
@@ -388,6 +443,11 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(c.description, "ASD")
         c.command("a", "b")
         self.assertEqual(v[-1], ("a", "b"))
+
+    def test_poll(self):
+        mock_e = Mock()
+        c = C.create(mock_e, "command")
+        self.assertDictEqual({}, c.poll())
 
 
 class TestHatFactory(unittest.TestCase):
@@ -528,7 +588,7 @@ class TestHat(unittest.TestCase):
         self.assertTrue(h.state)
         self.assertFalse(h.state)
 
-    @patch("threading.Lock")
+    @patch("threading.RLock")
     def test_flag_and_state_synchronize_do_flag_no(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
@@ -556,7 +616,7 @@ class TestHat(unittest.TestCase):
         h.reset()
         self.assertFalse(h.state)
 
-    @patch("threading.Lock")
+    @patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
@@ -594,6 +654,11 @@ class TestHat(unittest.TestCase):
         self.assertEqual(h.state, False)
         v = True
         self.assertEqual(h.state, True)
+
+    def test_poll(self):
+        mock_e = Mock()
+        h = H.create(mock_e, "hat")
+        self.assertDictEqual({}, h.poll())
 
 
 class TestWaiterCommandFactory(unittest.TestCase):
@@ -723,7 +788,7 @@ class TestWaiterCommand(unittest.TestCase):
         """Sanity chack without mocks"""
         w.command(busy, "a")
 
-    @patch("threading.Lock")
+    @patch("threading.RLock")
     def test_busy_access_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = Mock()  # Mock the extension
@@ -764,7 +829,7 @@ class TestWaiterCommand(unittest.TestCase):
         w.reset()
         self.assertSetEqual(w.busy, set())
 
-        with patch("threading.Lock") as m_lock:
+        with patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """Must rebuild to hane the mock"""
             w = W(mock_e, mock_cf)
@@ -814,6 +879,357 @@ class TestWaiterCommand(unittest.TestCase):
         self.assertEqual(w.description, "ASD")
         w.command("a", "b")
         self.assertEqual(v[-1], ("b",))
+
+    def test_poll(self):
+        mock_e = Mock()
+        w = W.create(mock_e, "wcommand")
+        self.assertDictEqual({}, w.poll())
+
+
+class TestRequesterFactory(unittest.TestCase):
+    """We are testing requester descriptors (reporters that can wait). They define name and description."""
+
+    def test_base(self):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, RF)
+        self.assertRaises(TypeError, RF, med)
+        rf = RF(med, 'test')
+        self.assertIs(med, rf.ed)
+        self.assertEqual('test', rf.name)
+        self.assertEqual('test', rf.description)
+        self.assertEqual("", rf.default)
+        self.assertEqual('R', rf.type)
+        self.assertDictEqual({}, rf.menu_dict)
+
+    def test_is_a_SensorFactory_instance(self):
+        rf = RF(Mock(), 'test')
+        self.assertIsInstance(rf, SF)
+
+    def test_create(self):
+        """Create requester object"""
+        rf = RF(Mock(), 'test')
+        mock_extension = Mock()
+        self.assertRaises(TypeError, rf.create)
+        r = rf.create(mock_extension)
+        self.assertIsInstance(r, R)
+        self.assertIs(r.extension, mock_extension)
+        self.assertIs(r.info, rf)
+
+
+class TestRequester(unittest.TestCase):
+    """Requester components perform asynchronous command. User application should override
+    do_read() or use a runtime method set() to define the value. If do_read is present it will
+    run in a new thread; when done value is updated and notified to scratch client application.
+    For general behaviour look Sensor
+    """
+
+    def test_base(self):
+        mock_e = Mock()  # Mock the extension
+        mock_ed = Mock()  # Mock the extension definition
+
+        """Costructor take extension as first argument and WaiterCommandFactory as second"""
+        self.assertRaises(TypeError, R)
+        self.assertRaises(TypeError, R, mock_e)
+
+        rf = RF(ed=mock_ed, name="wait", description="Are you done?")
+        r = R(mock_e, rf)
+        self.assertIs(r.extension, mock_e)
+        self.assertIs(r.info, rf)
+        self.assertEqual("", r.value)
+        self.assertEqual('wait', r.name)
+        self.assertEqual('Are you done?', r.description)
+        self.assertEqual('R', r.type)
+
+    def test_is_Sensor_subclass(self):
+        mock_e = Mock()  # Mock the extension
+        mock_rf = Mock()  # Mock the command info
+        r = R(mock_e, mock_rf)
+        self.assertIsInstance(r, S)
+
+    def get_requester(self, name="requester", default=0, do_read=None):
+        mock_e = Mock()
+        return R.create(mock_e, name=name, default=default, do_read=do_read)
+
+    def test_execute_busy_read(self):
+        """Remove the busy argument even if there is an exception
+        """
+        r = self.get_requester()
+        busy = 12345
+        self.assertFalse(r.results)
+
+        v = 12
+
+        def do_read():
+            return v
+
+        r.do_read = do_read
+        r.execute_busy_read(busy)
+        self.assertEquals([(busy, v, None)], r.results)
+        self.assertEqual(v, r.value)
+
+        r._busy.add(busy)
+        ex = Exception("my error")
+
+        def do_read():
+            raise ex
+
+        r.do_read = do_read
+        self.assertRaises(Exception, r.execute_busy_read, busy)
+        self.assertEquals([(busy, v, None), (busy, "invalid", ex)], r.results)
+        self.assertEqual(v, r.value)
+
+    @patch("threading.RLock")
+    def test_results_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        r = self.get_requester()
+        r.results
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+
+    def test_get_results(self):
+        r = self.get_requester()
+        self.assertFalse(r.get_results())
+        ex = [Exception(), Exception()]
+        r._new_result(234, 12, None)
+        r._new_result(24, 2, None)
+        r._new_result(3324, "invalid", ex[0])
+        r._new_result(324, "invalid", ex[1])
+        vals = [(234, 12, None),
+                          (24, 2, None),
+                          (3324, "invalid", ex[0]),
+                          (324, "invalid", ex[1])]
+        self.assertEquals(r.results, vals)
+        self.assertEquals(r.get_results(),
+                         vals)
+
+        self.assertEqual(r.results, [])
+        self.assertEqual(r.get_results(),
+                         [])
+        with patch("threading.RLock") as m_lock:
+            m_lock = m_lock.return_value
+            r = self.get_requester()
+            r.get_results()
+            self.assertEqual(m_lock.mock_calls[0], call.__enter__())
+            self.assertEqual(m_lock.mock_calls[-1], call.__exit__(None, None, None))
+
+    def test_get_async_start_thread_to_execute_execute_busy_read(self):
+        """Add busy, create thread with execute_busy_read target, set daemon to True and start thread.
+
+        Only if extension implement do_read()
+        """
+        r = self.get_requester()
+        busy = 12345
+        r.do_read = Mock()
+        with patch("threading.Thread", autospec=True) as mock_thread_class:
+            mock_thread = mock_thread_class.return_value
+            r.get_async(busy)
+            mock_thread_class.assert_called_with(name=ANY, target=r.execute_busy_read, args=(busy,))
+            mock_thread.setDaemon.assert_called_with(True)
+            self.assertTrue(mock_thread.start.called)
+        """Sanity chack without mocks"""
+        r.get_async(busy)
+
+        """Without do_read"""
+        del r.do_read
+        with patch("threading.Thread", autospec=True) as mock_thread_class:
+            r.get_async(busy)
+            self.assertFalse(mock_thread_class.called)
+        """Sanity chack without mocks"""
+        r.get_async(busy)
+
+    def test_get_async_no_do_read_results_list(self):
+        r = self.get_requester()
+        self.assertFalse(r.results)
+        busy = 12345
+        r.get_async(busy)
+        self.assertFalse(r.results)
+        "untiol set()"
+        r.set(223)
+        self.assertEqual(r.results, [(busy, 223, None)])
+        """two different busy"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy)
+        r.get_async(busy+1)
+        r.set(233)
+        self.assertEqual(r.results, [(busy, 233, None),
+                                     (busy+1, 233, None)])
+
+        """same busy"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy)
+        r.get_async(busy)
+        r.set(333)
+        self.assertEqual(r.results, [(busy, 333, None)])
+
+        """Empty -> empty"""
+        r._flush_results()
+        r.set(433)
+        self.assertFalse(r.results)
+
+        """Reset clean state"""
+        r.get_async(busy)
+        r.reset()
+        r.set(533)
+        self.assertFalse(r.results)
+
+
+
+    @patch("threading.RLock")
+    def test_busy_access_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        r = self.get_requester()
+        r.busy
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+
+        def do_read():
+            # Check busy add
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+            m_lock.reset_mock()
+
+        r.do_read = do_read
+        r.get_async(1234)
+
+        def do_read():
+            pass
+
+        r.do_read = do_read
+        m_lock.reset_mock()
+        r.execute_busy_read(1234)
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+
+    def test_reset(self):
+        """Should reset busy set"""
+        r = self.get_requester()
+        ex = Exception("a")
+        r._new_result(1234, 1, None)
+        r._new_result(2234, 2, None)
+        r._new_result(3234, "invalid", ex)
+        self.assertEqual(r.results,
+                         [(1234, 1, None),
+                          (2234, 2, None),
+                          (3234, "invalid", ex)])
+        r.reset()
+        self.assertEqual(r.results, [])
+
+        with patch("threading.RLock") as m_lock:
+            m_lock = m_lock.return_value
+            """Must rebuild to hane the mock"""
+            r = self.get_requester()
+            r.reset()
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+
+    def test_get_cgi(self):
+        """
+        TODO: Must be update for multiple arguments reporter
+        """
+        r = self.get_requester(name="My Name")
+        self.assertIsNone(r.get_cgi("not your cgi"))
+        self.assertIsNone(r.get_cgi("My%20Name"))
+        """Must start by /"""
+        """execute in line get() method"""
+        cgi = r.get_cgi("/My%20Name")
+        self.assertIsNotNone(cgi)
+        with patch.object(r, "get_async", autospec=True) as mock_update, \
+                patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
+            mock_blockable_get.return_value = 1232
+            self.assertEqual("1232", cgi(Mock(path="My%20Name")))
+            self.assertFalse(mock_update.called)
+
+        """One argument that is an integer: call get_async"""
+        self.assertIsNone(r.get_cgi("/My%20Name/mybusy"))
+        cgi = r.get_cgi("/My%20Name/1234")
+        self.assertIsNotNone(cgi)
+        self.assertEqual({}, cgi.headers)
+        with patch.object(r, "get_async", autospec=True) as mock_update:
+            self.assertEqual("", cgi(Mock(path="My%20Name/3452")))
+            mock_update.assert_called_with(3452)
+
+    def test_create(self):
+        mock_e = Mock()
+        r = R.create(mock_e, "requester")
+        self.assertIs(mock_e, r.extension)
+        self.assertEqual(r.name, "requester")
+        self.assertEqual(r.type, "R")
+
+        def do_read():
+            return "goofy"
+
+        r = R.create(mock_e, "requester2", default="RR", description="ASD", do_read=do_read)
+        self.assertIs(mock_e, r.extension)
+        self.assertEqual(r.name, "requester2")
+        self.assertEqual(r.info.default, "RR")
+        self.assertEqual(r.description, "ASD")
+        self.assertEqual(r.get(), "goofy")
+        self.assertEqual(r.type, "R")
+
+    def test_poll(self):
+        r = self.get_requester()
+        self.assertDictEqual({}, r.poll())
+
+    def test_busy_get_when_do_read_exist(self):
+        """Simply work like a proxy on do_read and not
+        enter in condition context"""
+        v = 51
+
+        def do_read():
+            return v
+
+        r = self.get_requester(do_read=do_read)
+        self.assertEqual(v, r.busy_get())
+        v = 23
+        self.assertEqual(v, r.busy_get())
+        with patch.object(r, "_condition", autospec=True) as mock_condition:
+            r.busy_get()
+            self.assertFalse(mock_condition.__enter__.called)
+
+    def test_busy_get_without_do_read(self):
+        """Execute busy_get() in a thread and check return value.
+        Main cycle use set() to wake up thread"""
+        r = self.get_requester()
+        started = threading.Event()
+        started.clear()
+
+        def thread_body():
+            started.set()
+            self.assertEqual(123, r.busy_get())
+
+        t = threading.Thread(target=thread_body)
+        t.start()
+        while not started.is_set():
+            started.wait(0.1)
+        r.set(123)  # Wakeup thread and do check
+        t.join(0.2)
+
+    def test_reset_unlock_waiter_request(self):
+        """Execute busy_get().
+        Main cycle use reset() to wake up thread.
+        Then check if results is empty"""
+        r = self.get_requester()
+        r._new_result(1234, "a", None)
+        self.assertTrue(r.results)
+        # put something
+        started = threading.Event()
+        started.clear()
+
+        def thread_body():
+            started.set()
+            r.busy_get()
+
+        t = threading.Thread(target=thread_body)
+        t.start()
+        while not started.is_set():
+            started.wait(0.1)
+        r.reset()  # Wakeup thread
+        t.join(0.2)
+        self.assertFalse(r.results)
 
 
 if __name__ == '__main__':

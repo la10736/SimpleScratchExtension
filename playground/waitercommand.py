@@ -19,9 +19,9 @@ class ExtensionWaiterCommand(Extension):
         t = 1 + 2 * random.random()
         i = ExtensionWaiterCommand.i
         ExtensionWaiterCommand.i += 1
-        print("===========================[{}]I'm waiting for {} seconds".format(i, t))
+        print("=========================== [{}] I'm waiting for {} seconds".format(i, t))
         time.sleep(t)
-        print("+++++++++++++++++++++++++++[{}]Done".format(i))
+        print("+++++++++++++++++++++++++++ [{}] Done".format(i))
 
 
     def do_init_components(self):

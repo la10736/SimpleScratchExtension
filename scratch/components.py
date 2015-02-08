@@ -1,9 +1,10 @@
-from builtins import bool
 import logging
 import threading
 import urllib.parse
 import weakref
+
 from scratch.cgi import CGI
+
 
 __author__ = 'michele'
 
@@ -64,13 +65,11 @@ class BlockFactory():
 
 
 class Block():
-    """Abstract Extension components"""
-
     def __init__(self, extension, info, value=None):
         self._ex = weakref.ref(extension)
         self._info = info
         self._value = value
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._busy = set()
 
     @property
@@ -110,12 +109,9 @@ class Block():
         with self._lock:
             self._busy.discard(busy)
 
-    def _busy_clean_unlocked(self):
-        self._busy = set()
-
     def _busy_clean(self):
         with self._lock:
-            self._busy_clean_unlocked()
+            self._busy = set()
 
     def do_reset(self):
         """Designed to override. Pay attention here you are in lock context: you just do your reset busness
@@ -128,6 +124,22 @@ class Block():
 
     def get_cgi(self, path):
         return None
+
+    @staticmethod
+    def _get_request_data(path):
+        els = path[1:].split("/")
+        els = [e for e in map(lambda url: urllib.parse.unquote(url), els)]
+        return els[0], els[1:]
+
+    def _check_command_argument(self, *args):
+        """ Base implementation: no cheks
+
+        :return: None if wrong elese the arguments tuple
+        """
+        return args
+
+    def poll(self):
+        return {}
 
 
 class Sensor(Block):
@@ -148,15 +160,28 @@ class Sensor(Block):
         v = value if value is not None else info.default
         super(Sensor, self).__init__(extension=extension, info=info, value=v)
 
-    def get(self):
+    @property
+    def value(self):
+        """Last value"""
         with self._lock:
-            if hasattr(self, "do_read"):
-                self._value = self.do_read()
+            return self._value
+
+    def _set_value(self, value):
+        with self._lock:
+            self._value = value
+
+    def get(self):
+        v = self.do_read() if hasattr(self, "do_read") else None
+        with self._lock:
+            if v is not None:
+                self._set_value(v)
             return self._value
 
     def set(self, value):
-        with self._lock:
-            self._value = value
+        self._set_value(value)
+
+    def poll(self):
+        return {self.name: self.get()}
 
 
 class SensorFactory(BlockFactory):
@@ -213,24 +238,11 @@ class Command(Block):
         with self._lock:
             self._value = args
 
-    @staticmethod
-    def _get_request_data(path):
-        els = path[1:].split("/")
-        els = [e for e in map(lambda url: urllib.parse.unquote(url), els)]
-        return els[0], els[1:]
-
     def _cgi(self, request):
         _name, args = self._get_request_data(request.path)
         args = self._check_command_argument(*args)
         self.command(*args)
         return ""
-
-    def _check_command_argument(self, *args):
-        """ Base implementation: no cheks
-
-        :return: None if wrong elese the arguments tuple
-        """
-        return args
 
     def get_cgi(self, path):
         if not path.startswith("/"):
@@ -316,7 +328,6 @@ class HatFactory(BlockFactory):
 
 
 class WaiterCommand(Command):
-
     @staticmethod
     def create(extension, name, default=(), description=None, **kwargs):
         do_command = extract_arg("do_command", kwargs)
@@ -332,7 +343,8 @@ class WaiterCommand(Command):
     def command(self, busy, *args):
         logging.info("waiter command {} = {}".format(self.name, args))
         if hasattr(self, "do_command"):
-            t = threading.Thread(name="Command {} [{}] execution".format(self.name, busy), target=self.execute_busy_command,
+            t = threading.Thread(name="Command {} [{}] execution".format(self.name, busy),
+                                 target=self.execute_busy_command,
                                  args=(busy,) + args)
             t.setDaemon(True)
             self._busy.add(busy)
@@ -342,7 +354,7 @@ class WaiterCommand(Command):
 
     def reset(self):
         with self._lock:
-            self._busy_clean_unlocked()
+            self._busy_clean()
             self.do_reset()
 
     def _check_command_argument(self, *args):
@@ -359,6 +371,146 @@ class WaiterCommand(Command):
             return None
         return args
 
+
 class WaiterCommandFactory(CommandFactory):
     type = "w"  # blocking commands
     block_constructor = WaiterCommand
+
+
+class Requester(Sensor):
+    @staticmethod
+    def create(extension, name, default=None, description=None, **kwargs):
+        do_read = extract_arg("do_read", kwargs)
+        factory = RequesterFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        return factory.create(extension=extension, do_read=do_read)
+
+    def __init__(self, extension, info, value=None):
+        super().__init__(extension, info, value)
+        self._condition = threading.Condition(self._lock)
+        self._ready = False
+        self._results = []
+        self._pending_async_results = set()
+
+    def _set_value(self, value):
+        with self._condition:
+            super()._set_value(value)
+            if not hasattr(self, "do_read"):
+                while self._pending_async_results:
+                    busy = self._pending_async_results.pop()
+                    self._new_result(busy, value, None)
+                self._flush_pending_async_results()
+            self._ready = True
+            self._condition.notify_all()
+
+    def _new_result(self, busy, v="invalid", exception=None):
+        with self._lock:
+            self._results.append((busy, v, exception))
+            self._pending_async_results.discard(busy)
+
+    def _flush_results(self):
+        with self._lock:
+            self._results = []
+
+    def _flush_pending_async_results(self):
+        with self._lock:
+            self._pending_async_results = set()
+
+    @property
+    def results(self):
+        with self._lock:
+            return self._results[:]
+
+    def get_results(self):
+        with self._lock:
+            ret = self._results
+            self._flush_results()
+            return ret
+
+    def execute_busy_read(self, busy, *args):
+        v = "invalid"
+        ex = None
+        try:
+            v = self.get(*args)
+        except Exception as e:
+            ex = e
+            raise e
+        finally:
+            self._new_result(busy, v, ex)
+
+    def get_async(self, busy):
+        logging.info("requester {}".format(self.name))
+        self._pending_async_results.add(busy)
+        if hasattr(self, "do_read"):
+            t = threading.Thread(name="Requester {} [{}] execution".format(self.name, busy),
+                                 target=self.execute_busy_read,
+                                 args=(busy,))
+            t.setDaemon(True)
+            self._busy.add(busy)
+            t.start()
+
+    def busy_get(self):
+        logging.info("busy_get {}".format(self.name))
+        if hasattr(self, "do_read"):
+            return self.do_read()
+        with self._condition:
+            self._ready = False
+            self._condition.wait_for(lambda:self._ready)
+            return self._value
+
+    def reset(self):
+        with self._lock:
+            self._ready = True
+            self._condition.notify_all()
+            self._busy_clean()
+            self._flush_results()
+            self._flush_pending_async_results()
+            self.do_reset()
+
+    def _check_command_argument(self, *args):
+        """ Base implementation for requester without arguments if no args return () [execute inline],
+        if an argument check if it is integer and use it as busy.
+
+        :return: None if wrong else the arguments tuple
+        """
+        if len(args) > 1:
+            return None
+        if not len(args):
+            return ()
+        try:
+            return (int(args[0]),)
+        except ValueError:
+            return None
+        return None
+
+    def _sync_cgi(self, request):
+        _name, args = self._get_request_data(request.path)
+        args = self._check_command_argument(*args)
+        return str(self.busy_get(*args))
+
+    def _async_cgi(self, request):
+        _name, args = self._get_request_data(request.path)
+        args = self._check_command_argument(*args)
+        self.get_async(*args)
+        return ""
+
+    def get_cgi(self, path):
+        if not path.startswith("/"):
+            return None
+        name, args = self._get_request_data(path)
+        if name != self.name:
+            return None
+        args = self._check_command_argument(*args)
+        if args is None:
+            return None
+        if not len(args):
+            return CGI(self._sync_cgi)
+        return CGI(self._async_cgi)
+
+    def poll(self):
+        return {}
+        #return {self.name: self.value}
+
+
+class RequesterFactory(SensorFactory):
+    type = "R"  # blocking reporter
+    block_constructor = Requester
