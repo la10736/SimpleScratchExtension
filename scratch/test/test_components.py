@@ -877,8 +877,7 @@ class TestWaiterCommand(unittest.TestCase):
         self.assertEqual(w.name, "control2")
         self.assertEqual(w.info.default, (1, 2, 3))
         self.assertEqual(w.description, "ASD")
-        w.command("a", "b")
-        self.assertEqual(v[-1], ("b",))
+        self.assertIs(do_command, w.do_command)
 
     def test_poll(self):
         mock_e = Mock()
