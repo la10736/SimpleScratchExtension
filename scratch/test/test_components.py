@@ -1193,17 +1193,15 @@ class TestRequester(unittest.TestCase):
         """Execute busy_get() in a thread and check return value.
         Main cycle use set() to wake up thread"""
         r = self.get_requester()
-        started = threading.Event()
-        started.clear()
 
         def thread_body():
-            started.set()
             self.assertEqual(123, r.busy_get())
 
         t = threading.Thread(target=thread_body)
+        r._ready=True
         t.start()
-        while not started.is_set():
-            started.wait(0.1)
+        with r._condition:
+            r._condition.wait_for(lambda:not r._ready, 0.1)
         r.set(123)  # Wakeup thread and do check
         t.join(0.2)
 
@@ -1215,17 +1213,15 @@ class TestRequester(unittest.TestCase):
         r._new_result(1234, "a", None)
         self.assertTrue(r.results)
         # put something
-        started = threading.Event()
-        started.clear()
 
         def thread_body():
-            started.set()
             r.busy_get()
 
         t = threading.Thread(target=thread_body)
+        r._ready = True
         t.start()
-        while not started.is_set():
-            started.wait(0.1)
+        with r._condition:
+            r._condition.wait_for(lambda:not r._ready, 0.1)
         r.reset()  # Wakeup thread
         t.join(0.2)
         self.assertFalse(r.results)

@@ -341,6 +341,12 @@ class ExtensionService():
             return ""
         return "_busy " + " ".join([str(v) for v in vals]) + "\n"
 
+    @staticmethod
+    def results_render(vals):
+        if not vals:
+            return ""
+        return "\n".join("_result {} {}".format(busy, val) for busy,val in vals)+"\n"
+
     def _crossdomain_xml(self, request):
         return """<cross-domain-policy>
 <allow-access-from domain="*" to-ports="{}"/>

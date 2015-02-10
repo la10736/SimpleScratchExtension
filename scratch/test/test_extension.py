@@ -494,7 +494,14 @@ class TestExtensionService(unittest.TestCase):
         self.assertSetEqual(busy, {int(e) for e in r[len("_busy "):].split(" ")})
 
     def test_results_render(self):
-        self.fail("IMPLEMENT")
+        self.assertEqual("", ES.results_render(set()))
+        r = ES.results_render({(1232, 2), (3423, "sss"), (21, "invalid")})
+        self.assertEquals("\n", r[-1])
+        self.assertSetEqual({"_result 1232 2", "_result 3423 sss", "_result 21 invalid"},
+                            set(r[:-1].split("\n")))
+
+
+
 
     def test_problems_render(self):
         self.fail("IMPLEMENT")
