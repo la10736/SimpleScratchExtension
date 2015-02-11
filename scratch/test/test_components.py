@@ -8,7 +8,7 @@ from scratch.portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, \
     Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
     WaiterCommand as W, WaiterCommandFactory as WF, Requester as R, \
-    RequesterFactory as RF
+    RequesterFactory as RF, BooleanBlock as B, BooleanFactory as BF
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -1225,6 +1225,46 @@ class TestRequester(unittest.TestCase):
         r.reset()  # Wakeup thread
         t.join(0.2)
         self.assertFalse(r.results)
+
+
+class TestBooleanBlock(unittest.TestCase):
+    """BooleanBlock components Are just sensor that return boolean value (true if trun , anything else otherwise)
+    For general behaviour look Sensor
+    """
+
+    def test_base(self):
+        mock_e = Mock()  # Mock the extension
+        mock_ed = Mock()  # Mock the extension definition
+
+        """Costructor take extension as first argument and WaiterCommandFactory as second"""
+        self.assertRaises(TypeError, B)
+        self.assertRaises(TypeError, B, mock_e)
+
+        bf = BF(ed=mock_ed, name="wait", description="Are you done?")
+        b = B(mock_e, bf)
+        self.assertIs(b.extension, mock_e)
+        self.assertIs(b.info, bf)
+        self.assertEqual("false", b.value)
+        self.assertEqual('wait', b.name)
+        self.assertEqual('Are you done?', b.description)
+        self.assertEqual('b', b.type)
+
+    def test_is_Sensor_subclass(self):
+        mock_e = Mock()  # Mock the extension
+        mock_bf = Mock()  # Mock the boolean info
+        b = B(mock_e, mock_bf)
+        self.assertIsInstance(b, B)
+
+    def test_get(self):
+        self.fail("Check true false values")
+
+    def test_create(self):
+        self.fail("Implement test")
+
+
+class TestBooleanFactory(unittest.TestCase):
+    def test_implement(self):
+        self.fail("Tests not implemented YET")
 
 
 if __name__ == '__main__':

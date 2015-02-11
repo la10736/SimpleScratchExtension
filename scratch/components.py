@@ -204,6 +204,20 @@ class SensorFactory(BlockFactory):
     def default(self):
         return self._default
 
+class BooleanBlock(Sensor):
+    @staticmethod
+    def create(extension, name, default=None, description=None, **kwargs):
+        do_read = extract_arg("do_read", kwargs)
+        factory = BooleanFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        return factory.create(extension=extension, do_read=do_read)
+
+    def get(self):
+        return "true" if super().get() else "false"
+
+
+class BooleanFactory(SensorFactory):
+    type = "b"  # reporters
+    block_constructor = BooleanBlock
 
 class Command(Block):
     """Command components perform actions and return. User application should override
