@@ -1240,31 +1240,102 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertRaises(TypeError, B)
         self.assertRaises(TypeError, B, mock_e)
 
-        bf = BF(ed=mock_ed, name="wait", description="Are you done?")
+        bf = BF(ed=mock_ed, name="ok", description="Are you done?")
         b = B(mock_e, bf)
         self.assertIs(b.extension, mock_e)
         self.assertIs(b.info, bf)
-        self.assertEqual("false", b.value)
-        self.assertEqual('wait', b.name)
+        self.assertEqual("", b.value)
+        self.assertEqual('ok', b.name)
         self.assertEqual('Are you done?', b.description)
         self.assertEqual('b', b.type)
 
+    def get_block(self, *args, **kwargs):
+        bf = BF(ed=Mock(), name="ok", description="Are you done?")
+        return B(Mock(), bf)
+
     def test_is_Sensor_subclass(self):
-        mock_e = Mock()  # Mock the extension
-        mock_bf = Mock()  # Mock the boolean info
-        b = B(mock_e, mock_bf)
+        b = self.get_block()
         self.assertIsInstance(b, B)
 
-    def test_get(self):
-        self.fail("Check true false values")
+    def test_get_set_clear(self):
+        b = self.get_block()
+        self.assertEqual("false", b.get())
+        b.set(True)
+        self.assertEqual("true", b.get())
+        b.set(False)
+        self.assertEqual("false", b.get())
+        b.set("a")
+        self.assertEqual("true", b.get())
+        b.set("")
+        self.assertEqual("false", b.get())
+        b.set()
+        self.assertEqual("true", b.get())
+        b.clear()
+        self.assertEqual("false", b.get())
+        b.set("a")
+        self.assertEqual("true", b.get())
+        b.clear()
+        self.assertEqual("false", b.get())
+
+
 
     def test_create(self):
-        self.fail("Implement test")
+        mock_e = Mock()
+        b = B.create(mock_e, "bool")
+        self.assertIs(mock_e, b.extension)
+        self.assertEqual(b.name, "bool")
+        self.assertEqual(b.type, "b")
+
+        v = True
+
+        def do_read():
+            return v
+
+        b = B.create(mock_e, "bool2", default=False, description="ASD", do_read=do_read)
+        self.assertIs(mock_e, b.extension)
+        self.assertEqual(b.name, "bool2")
+        self.assertEqual(b.info.default, False)
+        self.assertEqual(b.description, "ASD")
+        self.assertEqual(b.get(), "true")
+        self.assertEqual(b.type, "b")
+
+        v = False
+        self.assertEqual(b.get(), "false")
+
+
 
 
 class TestBooleanFactory(unittest.TestCase):
-    def test_implement(self):
-        self.fail("Tests not implemented YET")
+    """We are testing boolean descriptors (reporters that return boolean). They define name and description."""
+
+    def test_base(self):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, BF)
+        self.assertRaises(TypeError, BF, med)
+        bf = BF(med, 'test')
+        self.assertIs(med, bf.ed)
+        self.assertEqual('test', bf.name)
+        self.assertEqual('test', bf.description)
+        self.assertEqual('', bf.default)
+        self.assertEqual('b', bf.type)
+        self.assertDictEqual({}, bf.menu_dict)
+
+    def test_is_a_SensorFactory_instance(self):
+        bf = BF(Mock(), 'test')
+        self.assertIsInstance(bf, SF)
+
+    def test_create(self):
+        """Create requester object"""
+        bf = BF(Mock(), 'test')
+        mock_extension = Mock()
+        self.assertRaises(TypeError, bf.create)
+        b = bf.create(mock_extension)
+        self.assertIsInstance(b, B)
+        self.assertIs(b.extension, mock_extension)
+        self.assertIs(b.info, bf)
+
+
 
 
 if __name__ == '__main__':

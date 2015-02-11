@@ -214,6 +214,13 @@ class BooleanBlock(Sensor):
     def get(self):
         return "true" if super().get() else "false"
 
+    def set(self, value=True):
+        super().set(bool(value))
+
+    def clear(self):
+        """Clear the value"""
+        self.set(False)
+
 
 class BooleanFactory(SensorFactory):
     type = "b"  # reporters
