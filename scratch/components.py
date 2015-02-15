@@ -2,6 +2,7 @@ import logging
 import threading
 import urllib.parse
 import weakref
+import re
 
 from scratch.cgi import CGI
 
@@ -15,6 +16,66 @@ def extract_arg(arg, kwargs, default=None):
         v = kwargs[arg]
         del kwargs[arg]
     return v
+
+
+def to_bool(val):
+    return str(val).lower() == "true"
+
+
+_description_parser = re.compile("%(s|n|b|m\.[^\s]+|d\.[^\s]+)")
+
+
+def _create_menu_checker(menu):
+    def checker(v):
+        try:
+            return menu[v]
+        except TypeError:
+            pass
+        if v in menu:
+            return v
+        raise KeyError("Menu doesn't contain key {}".format(v))
+
+    return checker
+
+def _create_editable_menu_checker(menu):
+    def_mapper = menu.get(None, str)
+    def checker(v):
+        try:
+            return menu[v]
+        except TypeError:
+            pass
+        if v in menu:
+            return v
+        raise KeyError("Menu doesn't contain key {}".format(v))
+    return None
+
+def _desc_mapper(e, **kwargs):
+    if e == "s":
+        return str
+    if e == "n":
+        return float
+    if e == "b":
+        return to_bool
+    if e.startswith("m."):
+        mname = e[2:]
+        try:
+            return _create_menu_checker(kwargs[mname])
+        except KeyError:
+            raise TypeError(
+                "Description contains {} menu: need a keyword args {}=[... Your menu ...]".format(mname, mname))
+    if e.startswith("d."):
+        mname = e[2:]
+        try:
+            return _create_editable_menu_checker(kwargs[mname])
+        except KeyError:
+            return str
+
+
+def parse_description(description, **kwargs):
+    ret = []
+
+    elements = _description_parser.findall(description)
+    return tuple([_desc_mapper(e, **kwargs) for e in elements])
 
 
 class BlockFactory():
@@ -204,6 +265,7 @@ class SensorFactory(BlockFactory):
     def default(self):
         return self._default
 
+
 class BooleanBlock(Sensor):
     @staticmethod
     def create(extension, name, default=None, description=None, **kwargs):
@@ -225,6 +287,7 @@ class BooleanBlock(Sensor):
 class BooleanFactory(SensorFactory):
     type = "b"  # reporters
     block_constructor = BooleanBlock
+
 
 class Command(Block):
     """Command components perform actions and return. User application should override
@@ -475,7 +538,7 @@ class Requester(Sensor):
             return self.do_read()
         with self._condition:
             self._ready = False
-            self._condition.wait_for(lambda:self._ready)
+            self._condition.wait_for(lambda: self._ready)
             return self._value
 
     def reset(self):
@@ -529,9 +592,17 @@ class Requester(Sensor):
 
     def poll(self):
         return {}
-        #return {self.name: self.value}
+        # return {self.name: self.value}
 
 
 class RequesterFactory(SensorFactory):
     type = "R"  # blocking reporter
     block_constructor = Requester
+
+
+class Reporter(Sensor):
+    pass
+
+
+class ReporterFactory(SensorFactory):
+    block_constructor = Reporter

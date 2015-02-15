@@ -8,7 +8,9 @@ from scratch.portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, \
     Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
     WaiterCommand as W, WaiterCommandFactory as WF, Requester as R, \
-    RequesterFactory as RF, BooleanBlock as B, BooleanFactory as BF
+    RequesterFactory as RF, BooleanBlock as B, BooleanFactory as BF, \
+    Reporter as RR, ReporterFactory as RRF
+from scratch.components import parse_description, to_bool
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -995,16 +997,16 @@ class TestRequester(unittest.TestCase):
         r._new_result(3324, "invalid", ex[0])
         r._new_result(324, "invalid", ex[1])
         vals = [(234, 12, None),
-                          (24, 2, None),
-                          (3324, "invalid", ex[0]),
-                          (324, "invalid", ex[1])]
+                (24, 2, None),
+                (3324, "invalid", ex[0]),
+                (324, "invalid", ex[1])]
         self.assertEquals(r.results, vals)
         self.assertEquals(r.get_results(),
-                         vals)
+                          vals)
 
         self.assertEqual(r.results, [])
         self.assertEqual(r.get_results(),
-                         [])
+            [])
         with patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             r = self.get_requester()
@@ -1050,10 +1052,10 @@ class TestRequester(unittest.TestCase):
         r._flush_results()
         self.assertFalse(r.results)
         r.get_async(busy)
-        r.get_async(busy+1)
+        r.get_async(busy + 1)
         r.set(233)
         self.assertEqual(r.results, [(busy, 233, None),
-                                     (busy+1, 233, None)])
+                                     (busy + 1, 233, None)])
 
         """same busy"""
         r._flush_results()
@@ -1073,7 +1075,6 @@ class TestRequester(unittest.TestCase):
         r.reset()
         r.set(533)
         self.assertFalse(r.results)
-
 
 
     @patch("threading.RLock")
@@ -1198,10 +1199,10 @@ class TestRequester(unittest.TestCase):
             self.assertEqual(123, r.busy_get())
 
         t = threading.Thread(target=thread_body)
-        r._ready=True
+        r._ready = True
         t.start()
         with r._condition:
-            r._condition.wait_for(lambda:not r._ready, 0.1)
+            r._condition.wait_for(lambda: not r._ready, 0.1)
         r.set(123)  # Wakeup thread and do check
         t.join(0.2)
 
@@ -1221,14 +1222,14 @@ class TestRequester(unittest.TestCase):
         r._ready = True
         t.start()
         with r._condition:
-            r._condition.wait_for(lambda:not r._ready, 0.1)
+            r._condition.wait_for(lambda: not r._ready, 0.1)
         r.reset()  # Wakeup thread
         t.join(0.2)
         self.assertFalse(r.results)
 
 
 class TestBooleanBlock(unittest.TestCase):
-    """BooleanBlock components Are just sensor that return boolean value (true if trun , anything else otherwise)
+    """BooleanBlock components Are just sensor that return boolean value (true if true , anything else otherwise)
     For general behaviour look Sensor
     """
 
@@ -1278,7 +1279,6 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual("false", b.get())
 
 
-
     def test_create(self):
         mock_e = Mock()
         b = B.create(mock_e, "bool")
@@ -1301,8 +1301,6 @@ class TestBooleanBlock(unittest.TestCase):
 
         v = False
         self.assertEqual(b.get(), "false")
-
-
 
 
 class TestBooleanFactory(unittest.TestCase):
@@ -1336,6 +1334,108 @@ class TestBooleanFactory(unittest.TestCase):
         self.assertIs(b.info, bf)
 
 
+class Test_utils(unittest.TestCase):
+    """Testing useful functions"""
+
+    def test_to_bool(self):
+        self.assertIs(True, to_bool("true"))
+        self.assertIs(True, to_bool("True"))
+        self.assertIs(True, to_bool("tRUe"))
+        self.assertIs(False, to_bool("tRU"))
+        self.assertIs(False, to_bool("false"))
+        self.assertIs(False, to_bool("False"))
+        self.assertIs(False, to_bool(""))
+        self.assertIs(False, to_bool("1"))
+        self.assertIs(False, to_bool("Yes"))
+        self.assertIs(False, to_bool("0"))
+
+    def test_parse_description_base(self):
+        """Signature : take one positional argument (the description to parse) and optional nominal arguments
+        that are the menues"""
+        self.assertRaises(TypeError, parse_description)
+        self.assertRaises(TypeError, parse_description, "a", "b")
+        self.assertEqual((), parse_description(""))
+        self.assertEqual((), parse_description("Minnie"))
+        self.assertEqual((str,), parse_description("Minnie %s"))
+        self.assertEqual((str, float, to_bool), parse_description("Minnie %s from value %n is %b"))
+
+
+    def test_parse_description_menu(self):
+        """Add some menues"""
+        self.assertEqual((), parse_description("Minnie %m", wrong_menu=["a", "b"]))
+
+        self.assertRaises(TypeError, parse_description, "Minnie %m.my_menu")
+
+        my_menu = ["a", "b"]
+        d = parse_description("Minnie %m.my_menu", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        for e in my_menu:
+            self.assertEqual(d[0](e), e)
+        self.assertRaises(KeyError, d[0], "not in my_menu")
+        my_other_menu = ["1", "2", "3"]
+        d = parse_description("Minnie %m.my_menu and %m.my_other_menu", my_menu=my_menu, my_other_menu=my_other_menu)
+        self.assertEqual(2, len(d))
+        self.assertIsNotNone(d[0])
+        self.assertIsNotNone(d[1])
+        for e in my_other_menu:
+            self.assertEqual(d[1](e), e)
+        self.assertRaises(KeyError, d[1], "not in my_menu")
+
+    def test_parse_description_menu_mapper(self):
+        """If the requester menu is a mapper elements return the mapped object instead the key"""
+        my_menu = {"a": "A", "b": "B"}
+        d = parse_description("Minnie %m.my_menu", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        self.assertEqual(d[0]("a"), "A")
+        self.assertEqual(d[0]("b"), "B")
+        self.assertRaises(KeyError, d[0], "not in my_menu")
+
+    def test_parse_description_editable_menu(self):
+        """For editable menu if not given as keyword args it will mapped by str. Otherwise the menu could be
+         a mapper object or a callable. If it is a mapper it should map None value that can be a
+         - value that will replace original value
+         - a callable that will by called by the value and return the valid one
+         If None me is not present for the non mapped object we will use str()
+         """
+        """No menu case -> str"""
+        self.assertEqual((str,), parse_description("Minnie %d.my_menu"))
+
+        """No None element -> default str"""
+        my_menu = {"a": "A", "b": "B"}
+        d = parse_description("Minnie %d.my_menu", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        self.assertEqual(d[0]("a"), "A")
+        self.assertEqual(d[0]("b"), "B")
+        self.assertEqual(d[0]("c"), "c")
+        self.assertEqual(d[0](1), "1")
+        self.assertEqual(d[0](1.2), "1.2")
+
+
+
+
+
+class TestReporter(unittest.TestCase):
+    """Reporter are sensor block that support arguments"""
+
+    def test_base(self):
+        mock_e = Mock()  # Mock the extension
+        mock_ed = Mock()  # Mock the extension definition
+
+        """Costructor take extension as first argument and ReporterFactory as second"""
+        self.assertRaises(TypeError, RR)
+        self.assertRaises(TypeError, RR, mock_e)
+
+        rrf = RRF(ed=mock_ed, name="get_message", description="Get message from %s")
+        rr = RR(mock_e, rrf)
+        self.assertIs(rr.extension, mock_e)
+        self.assertIs(rr.info, rrf)
+        self.assertEqual("", rr.value)
+        self.assertEqual('get_message', rr.name)
+        self.assertEqual('Get message from %s', rr.description)
+        self.assertEqual('r', rr.type)
 
 
 if __name__ == '__main__':
