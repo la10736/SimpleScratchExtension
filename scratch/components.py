@@ -3,6 +3,7 @@ import threading
 import urllib.parse
 import weakref
 import re
+import collections
 
 from scratch.cgi import CGI
 
@@ -27,27 +28,34 @@ _description_parser = re.compile("%(s|n|b|m\.[^\s]+|d\.[^\s]+)")
 
 def _create_menu_checker(menu):
     def checker(v):
-        try:
+        if isinstance(menu, collections.Mapping):
             return menu[v]
-        except TypeError:
-            pass
-        if v in menu:
-            return v
-        raise KeyError("Menu doesn't contain key {}".format(v))
+        elif isinstance(menu, collections.Container):
+            if v in menu:
+                return v
+            raise KeyError("Menu doesn't contain key {}".format(v))
+
 
     return checker
 
 def _create_editable_menu_checker(menu):
-    def_mapper = menu.get(None, str)
+    try:
+        def_mapper = menu.get(None, str)
+    except AttributeError:
+        def_mapper = str
     def checker(v):
-        try:
-            return menu[v]
-        except TypeError:
-            pass
-        if v in menu:
-            return v
-        raise KeyError("Menu doesn't contain key {}".format(v))
-    return None
+        if isinstance(menu, collections.Mapping):
+            try:
+                return menu[v]
+            except KeyError:
+                return def_mapper(v)
+        elif isinstance(menu, collections.Container):
+            if v in menu:
+                return v
+            else:
+                return def_mapper(v)
+        raise TypeError("Menu must be a Mapping or Container")
+    return checker
 
 def _desc_mapper(e, **kwargs):
     if e == "s":
@@ -56,19 +64,17 @@ def _desc_mapper(e, **kwargs):
         return float
     if e == "b":
         return to_bool
-    if e.startswith("m."):
+    if e.startswith("m.") or e.startswith("d."):
         mname = e[2:]
+        checker_factory = _create_menu_checker if e[0]=='m' else _create_editable_menu_checker
         try:
-            return _create_menu_checker(kwargs[mname])
+            menu = kwargs[mname]
+            if not isinstance(menu, (collections.Mapping, collections.Container)):
+                raise TypeError("Menu must be a Mapping or Container")
+            return checker_factory(menu)
         except KeyError:
             raise TypeError(
-                "Description contains {} menu: need a keyword args {}=[... Your menu ...]".format(mname, mname))
-    if e.startswith("d."):
-        mname = e[2:]
-        try:
-            return _create_editable_menu_checker(kwargs[mname])
-        except KeyError:
-            return str
+                "Description contains {} menu: need a keyword args {}=<Your menu>".format(mname, mname))
 
 
 def parse_description(description, **kwargs):

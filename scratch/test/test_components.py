@@ -1373,6 +1373,7 @@ class Test_utils(unittest.TestCase):
         for e in my_menu:
             self.assertEqual(d[0](e), e)
         self.assertRaises(KeyError, d[0], "not in my_menu")
+        self.assertRaises(KeyError, d[0], 0)
         my_other_menu = ["1", "2", "3"]
         d = parse_description("Minnie %m.my_menu and %m.my_other_menu", my_menu=my_menu, my_other_menu=my_other_menu)
         self.assertEqual(2, len(d))
@@ -1381,6 +1382,11 @@ class Test_utils(unittest.TestCase):
         for e in my_other_menu:
             self.assertEqual(d[1](e), e)
         self.assertRaises(KeyError, d[1], "not in my_menu")
+        self.assertRaises(KeyError, d[1], 0)
+
+        """Not valid menu"""
+        self.assertRaises(TypeError, parse_description, "Minnie %m.my_menu", my_menu=123)
+
 
     def test_parse_description_menu_mapper(self):
         """If the requester menu is a mapper elements return the mapped object instead the key"""
@@ -1393,14 +1399,16 @@ class Test_utils(unittest.TestCase):
         self.assertRaises(KeyError, d[0], "not in my_menu")
 
     def test_parse_description_editable_menu(self):
-        """For editable menu if not given as keyword args it will mapped by str. Otherwise the menu could be
-         a mapper object or a callable. If it is a mapper it should map None value that can be a
+        """For editable menu if not given as keyword args it will raise TypeError.
+        Otherwise the menu could be a mapper object or a list/tuple. If it is a mapper it should map None value
+        that can be a
          - value that will replace original value
          - a callable that will by called by the value and return the valid one
          If None me is not present for the non mapped object we will use str()
+         If menu is a list, set or tuple the element str() function will be used for all elements
          """
-        """No menu case -> str"""
-        self.assertEqual((str,), parse_description("Minnie %d.my_menu"))
+        """No menu case -> TypeError"""
+        self.assertRaises(TypeError, parse_description, "Minnie %d.my_menu")
 
         """No None element -> default str"""
         my_menu = {"a": "A", "b": "B"}
@@ -1412,6 +1420,35 @@ class Test_utils(unittest.TestCase):
         self.assertEqual(d[0]("c"), "c")
         self.assertEqual(d[0](1), "1")
         self.assertEqual(d[0](1.2), "1.2")
+        my_menu = {"a": "A", "b": "B", None: lambda v:str(v).upper()}
+        d = parse_description("Minnie %d.my_menu", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        self.assertEqual(d[0]("a"), "A")
+        self.assertEqual(d[0]("b"), "B")
+        self.assertEqual(d[0]("c"), "C")
+        self.assertEqual(d[0]("d"), "D")
+        self.assertEqual(d[0](1), "1")
+        self.assertEqual(d[0](1.2), "1.2")
+
+        my_menu = ["a", "b"]
+        d = parse_description("Minnie %d.my_menu", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        self.assertEqual(d[0]("a"), "a")
+        self.assertEqual(d[0]("b"), "b")
+        self.assertEqual(d[0]("c"), "c")
+        self.assertEqual(d[0]("d"), "d")
+        self.assertEqual(d[0](1), "1")
+        self.assertEqual(d[0](1.2), "1.2")
+
+        """Not valid menu"""
+        self.assertRaises(TypeError, parse_description, "Minnie %d.my_menu", my_menu=123)
+
+
+
+
+
 
 
 
