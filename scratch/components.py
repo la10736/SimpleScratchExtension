@@ -1,3 +1,4 @@
+import copy
 import logging
 import threading
 import urllib.parse
@@ -23,7 +24,7 @@ def to_bool(val):
     return str(val).lower() == "true"
 
 
-_description_parser = re.compile("%(s|n|b|m\.[^\s]+|d\.[^\s]+)")
+_description_parser = re.compile("%(s|n|b|m\.[^\s.]+|d\.[^\s.]+)")
 
 
 def _create_menu_checker(menu):
@@ -89,7 +90,7 @@ class BlockFactory():
     block_constructor = None  # Abstract
     cb_arg = None  # Abstract
 
-    def __init__(self, ed, name, description=None, **menudict):
+    def __init__(self, ed, name, description=None, **menus):
         """
         :param ed: The ExtensionDefinition (container)
         :param name: the name of the block
@@ -98,7 +99,7 @@ class BlockFactory():
         """
         self._ed = weakref.ref(ed) if ed is not None else None
         self._name = name
-        self._menu_dict = menudict
+        self._menu_dict = copy.deepcopy(menus)
         self._description = description if description is not None else self._name
 
     @property
@@ -256,15 +257,16 @@ class SensorFactory(BlockFactory):
     block_constructor = Sensor
     cb_arg = "do_read"
 
-    def __init__(self, ed, name, default="", description=None):
+    def __init__(self, ed, name, default="", description=None, **menus):
         """
         :param ed: The ExtensionDefinition (container)
         :param name: the name of the sensor
         :param default: the default return value
         :param description: the description of the sensor. If None the description is equla to the name
+        :param menu: menues
         :return:
         """
-        super().__init__(ed=ed, name=name, description=description)
+        super().__init__(ed=ed, name=name, description=description, **menus)
         self._default = default
 
     @property
@@ -612,3 +614,7 @@ class Reporter(Sensor):
 
 class ReporterFactory(SensorFactory):
     block_constructor = Reporter
+
+    @property
+    def signature(self):
+        return parse_description(self.description, **self._menu_dict)

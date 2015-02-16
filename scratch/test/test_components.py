@@ -1384,6 +1384,14 @@ class Test_utils(unittest.TestCase):
         self.assertRaises(KeyError, d[1], "not in my_menu")
         self.assertRaises(KeyError, d[1], 0)
 
+        """Menu name can end by . """
+        my_menu = ["a", "b"]
+        d = parse_description("Minnie %m.my_menu.", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        for e in my_menu:
+            self.assertEqual(d[0](e), e)
+
         """Not valid menu"""
         self.assertRaises(TypeError, parse_description, "Minnie %m.my_menu", my_menu=123)
 
@@ -1442,16 +1450,16 @@ class Test_utils(unittest.TestCase):
         self.assertEqual(d[0](1), "1")
         self.assertEqual(d[0](1.2), "1.2")
 
+        """Menu name can end by . """
+        my_menu = ["a", "b"]
+        d = parse_description("Minnie %d.my_menu.", my_menu=my_menu)
+        self.assertEqual(1, len(d))
+        self.assertIsNotNone(d[0])
+        for e in my_menu:
+            self.assertEqual(d[0](e), e)
+
         """Not valid menu"""
         self.assertRaises(TypeError, parse_description, "Minnie %d.my_menu", my_menu=123)
-
-
-
-
-
-
-
-
 
 
 class TestReporter(unittest.TestCase):
@@ -1473,6 +1481,59 @@ class TestReporter(unittest.TestCase):
         self.assertEqual('get_message', rr.name)
         self.assertEqual('Get message from %s', rr.description)
         self.assertEqual('r', rr.type)
+
+
+class TestReporterFactory(unittest.TestCase):
+    """We are testing reporter descriptors (sensor with arguments). They define name and description and provide
+    a signature: a tuple of functions that take the arguments as string and return the arguments to use
+    in do_read() and set() methods."""
+
+    def test_base(self):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, RRF)
+        self.assertRaises(TypeError, RRF, med)
+        rrf = RRF(med, 'test')
+        self.assertIs(med, rrf.ed)
+        self.assertEqual('test', rrf.name)
+        self.assertEqual('test', rrf.description)
+        self.assertEqual("", rrf.default)
+        self.assertEqual('r', rrf.type)
+        self.assertDictEqual({}, rrf.menu_dict)
+
+    def test_is_a_SensorFactory_instance(self):
+        rrf = RRF(Mock(), 'test')
+        self.assertIsInstance(rrf, SF)
+
+    def test_create(self):
+        self.fail("NOT IMPLEMENTED YET")
+
+    def apply_signature(self, sig, values):
+        return [f(v) for f,v in zip(sig, values)]
+
+    def test_signature(self):
+        """Return the signature of do_read() and set() method. To do the work use parse_description"""
+        med = Mock()
+        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=["left","right"])
+        vals = self.apply_signature(rrf.signature, ("3","left","joe"))
+        self.assertEqual(vals, [3, "left","joe"])
+
+        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands={"left":0,"right":1})
+        vals = self.apply_signature(rrf.signature, ("3","left","joe"))
+        self.assertEqual(vals, [3, 0,"joe"])
+        vals = self.apply_signature(rrf.signature, ("5.2","right","Ely"))
+        self.assertEqual(vals, [5.2, 1,"Ely"])
+
+        """Change a dict must not change behaviour"""
+        m = {"left":0,"right":1}
+        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=m)
+        vals = self.apply_signature(rrf.signature, ("1","right","Vincent"))
+        self.assertEqual(vals, [1, 1,"Vincent"])
+        m["right"] = 32
+        vals = self.apply_signature(rrf.signature, ("1","right","Vincent"))
+        self.assertEqual(vals, [1, 1,"Vincent"])
+
+
 
 
 if __name__ == '__main__':
