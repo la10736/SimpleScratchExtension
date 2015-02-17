@@ -1481,6 +1481,42 @@ class TestReporter(unittest.TestCase):
         self.assertEqual('get_message', rr.name)
         self.assertEqual('Get message from %s', rr.description)
         self.assertEqual('r', rr.type)
+    
+    def test_proxy(self):
+        """Check the proxy"""
+        mock_e = Mock()  # Mock the extension
+        mock_rf = Mock()  # Mock the reporter info
+        r = RR(mock_e, mock_rf)
+        self.assertIs(r.type, mock_rf.type)
+        self.assertIs(r.name, mock_rf.name)
+        self.assertIs(r.description, mock_rf.description)
+        self.assertIs(r.definition, mock_rf.definition)
+        self.assertIs(r.signature, mock_rf.signature)
+
+    def test_get_should_respect_the_signature(self):
+        mock_e = Mock()  # Mock the extension
+        med = Mock()
+        rrf = RRF(med, 'test', description="Base Signature: no args")
+        r = RR(mock_e, rrf, value=13)
+        self.assertEqual(13, r.get())
+        self.assertRaises(TypeError, r.get, 1)
+        self.assertRaises(TypeError, r.get, "minnie")
+
+        """One string"""
+        rrf = RRF(med, 'test', description="Set name to %s")
+        r = RR(mock_e, rrf, value={None:"my default","sentinel":"you got it"})
+        self.assertRaises(TypeError, r.get)
+        self.assertRaises(TypeError, r.get, "first", "second")
+        self.assertEqual("you got it", r.get("sentinel"))
+        self.assertEqual("my default", r.get("wrong"))
+        self.assertEqual("my default", r.get(12))
+        self.assertEqual("my default", r.get("32.4"))
+        self.assertEqual("my default", r.get(3.4))
+
+
+
+
+
 
 
 class TestReporterFactory(unittest.TestCase):

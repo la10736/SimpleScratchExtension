@@ -165,6 +165,10 @@ class Block():
         return self.info.definition
 
     @property
+    def signature(self):
+        return self.info.signature
+
+    @property
     def busy(self):
         with self._lock:
             return self._busy.copy()
