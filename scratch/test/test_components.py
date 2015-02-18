@@ -1428,7 +1428,7 @@ class Test_utils(unittest.TestCase):
         self.assertEqual(d[0]("c"), "c")
         self.assertEqual(d[0](1), "1")
         self.assertEqual(d[0](1.2), "1.2")
-        my_menu = {"a": "A", "b": "B", None: lambda v:str(v).upper()}
+        my_menu = {"a": "A", "b": "B", None: lambda v: str(v).upper()}
         d = parse_description("Minnie %d.my_menu", my_menu=my_menu)
         self.assertEqual(1, len(d))
         self.assertIsNotNone(d[0])
@@ -1481,7 +1481,7 @@ class TestReporter(unittest.TestCase):
         self.assertEqual('get_message', rr.name)
         self.assertEqual('Get message from %s', rr.description)
         self.assertEqual('r', rr.type)
-    
+
     def test_proxy(self):
         """Check the proxy"""
         mock_e = Mock()  # Mock the extension
@@ -1503,8 +1503,8 @@ class TestReporter(unittest.TestCase):
         self.assertRaises(TypeError, r.get, "minnie")
 
         """One string"""
-        rrf = RRF(med, 'test', description="Set name to %s")
-        r = RR(mock_e, rrf, value={None:"my default","sentinel":"you got it"})
+        rrf = RRF(med, 'test', description="Get info about %s")
+        r = RR(mock_e, rrf, value={None: "my default", "sentinel": "you got it"})
         self.assertRaises(TypeError, r.get)
         self.assertRaises(TypeError, r.get, "first", "second")
         self.assertEqual("you got it", r.get("sentinel"))
@@ -1513,10 +1513,103 @@ class TestReporter(unittest.TestCase):
         self.assertEqual("my default", r.get("32.4"))
         self.assertEqual("my default", r.get(3.4))
 
+        """One string, one float, one menu"""
+        rrf = RRF(med, 'test', description="Get info about %s, age %n, gender %m.gender", gender=["male", "female"])
+        r = RR(mock_e, rrf, value={None: "my default", "sentinel": {None: "default age",
+                                                                    32: {"male": "MALE", "female": "FEMALE"},
+                                                                    12: {"male": "MalE"}}})
 
+        self.assertRaises(TypeError, r.get)
+        self.assertRaises(TypeError, r.get, "first")
+        self.assertRaises(TypeError, r.get, "first", 2)
+        self.assertRaises(TypeError, r.get, "first", 2, "male", "other")
 
+        self.assertEqual("MALE", r.get("sentinel", 32, "male"))
+        self.assertEqual("FEMALE", r.get("sentinel", 32, "female"))
+        self.assertEqual("MalE", r.get("sentinel", 12, "male"))
+        self.assertEqual("default age", r.get("sentinel", 12, "female"))  # last default
+        self.assertEqual("default age", r.get("sentinel", 5, "female"))  # age default
+        self.assertEqual("my default", r.get("sent", 12, "male"))  # name default
 
+        self.assertRaises(KeyError, r.get, "sentinel", 32, "MALE")
 
+    def test_set_should_respect_the_signature(self):
+        mock_e = Mock()  # Mock the extension
+        med = Mock()
+        rrf = RRF(med, 'test', description="Base Signature: no args")
+        r = RR(mock_e, rrf, value=13)
+        r.set(12)
+        self.assertRaises(TypeError, r.set, 10, 1)
+        self.assertRaises(TypeError, r.set, 11, "minnie")
+
+        """One string"""
+        rrf = RRF(med, 'test', description="Get info about %s")
+        r = RR(mock_e, rrf, value={None: "my default", "sentinel": "you got it"})
+        self.assertRaises(TypeError, r.set, "No info")
+        self.assertRaises(TypeError, r.set, "No info", "john", "other")
+        r.set("No info", "john")
+        self.assertEqual("you got it", r.get("sentinel"))
+        self.assertEqual("No info", r.get("john"))
+        self.assertEqual("my default", r.get("wrong"))
+        self.assertEqual("my default", r.get(12))
+        self.assertEqual("my default", r.get("32.4"))
+        self.assertEqual("my default", r.get(3.4))
+
+        """One string, one float, one menu"""
+        rrf = RRF(med, 'test', description="Get info about %s, age %n, gender %m.gender", gender=["male", "female"])
+        r = RR(mock_e, rrf, value={None: "my default", "sentinel": {None: "default age",
+                                                                    32: {"male": "MALE", "female": "FEMALE"},
+                                                                    12: {"male": "MalE"}}})
+
+        self.assertRaises(TypeError, r.set)
+        self.assertRaises(TypeError, r.set, "GOLD", "first")
+        self.assertRaises(TypeError, r.set, "GOLD", "first", 2)
+        self.assertRaises(TypeError, r.set, "GOLD", "first", 2, "male", "other")
+
+        r.set("GOLD", "john", 25, "male")
+        self.assertEqual("GOLD", r.get("john", 25, "male"))
+        self.assertEqual("MALE", r.get("sentinel", 32, "male"))
+        #Override
+        r.set("MaLe","sentinel", 32, "male")
+        self.assertEqual("MaLe", r.get("sentinel", 32, "male"))
+
+        self.assertRaises(KeyError, r.set, "GOLD", "sentinel", 32, "MALE")
+
+    def test_reset_recover_default_value(self):
+        self.fail("Not Implemented Yet")
+
+    def test_do_read(self):
+        self.fail("Not Implemented Yet")
+
+    @patch("threading.RLock")
+    def test_get_and_set_synchronize(self, m_lock):
+        self.fail("Not Implemented Yet")
+        # m_lock = m_lock.return_value
+        # mock_e = Mock()  # Mock the extension
+        # mock_sf = Mock()  # Mock the sensor info
+        # s = S(mock_e, mock_sf, value=56)
+        # s.get()
+        # self.assertTrue(m_lock.__enter__.called)
+        # self.assertTrue(m_lock.__exit__.called)
+        # m_lock.reset_mock()
+        # s.set("ss")
+        # self.assertTrue(m_lock.__enter__.called)
+        # self.assertTrue(m_lock.__exit__.called)
+
+    def test_value(self):
+        """1) return last computed value
+           2) synchronize
+        """
+        self.fail("Not Implemented Yet")
+
+    def test_get_cgi(self):
+        self.fail("Not Implemented Yet")
+
+    def test_create(self):
+        self.fail("Not Implemented Yet")
+
+    def test_poll(self):
+        self.fail("Not Implemented Yet")
 
 
 class TestReporterFactory(unittest.TestCase):
@@ -1545,31 +1638,30 @@ class TestReporterFactory(unittest.TestCase):
         self.fail("NOT IMPLEMENTED YET")
 
     def apply_signature(self, sig, values):
-        return [f(v) for f,v in zip(sig, values)]
+        return [f(v) for f, v in zip(sig, values)]
 
     def test_signature(self):
         """Return the signature of do_read() and set() method. To do the work use parse_description"""
         med = Mock()
-        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=["left","right"])
-        vals = self.apply_signature(rrf.signature, ("3","left","joe"))
-        self.assertEqual(vals, [3, "left","joe"])
+        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=["left", "right"])
+        vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
+        self.assertEqual(vals, [3, "left", "joe"])
 
-        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands={"left":0,"right":1})
-        vals = self.apply_signature(rrf.signature, ("3","left","joe"))
-        self.assertEqual(vals, [3, 0,"joe"])
-        vals = self.apply_signature(rrf.signature, ("5.2","right","Ely"))
-        self.assertEqual(vals, [5.2, 1,"Ely"])
+        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s",
+                  hands={"left": 0, "right": 1})
+        vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
+        self.assertEqual(vals, [3, 0, "joe"])
+        vals = self.apply_signature(rrf.signature, ("5.2", "right", "Ely"))
+        self.assertEqual(vals, [5.2, 1, "Ely"])
 
         """Change a dict must not change behaviour"""
-        m = {"left":0,"right":1}
+        m = {"left": 0, "right": 1}
         rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=m)
-        vals = self.apply_signature(rrf.signature, ("1","right","Vincent"))
-        self.assertEqual(vals, [1, 1,"Vincent"])
+        vals = self.apply_signature(rrf.signature, ("1", "right", "Vincent"))
+        self.assertEqual(vals, [1, 1, "Vincent"])
         m["right"] = 32
-        vals = self.apply_signature(rrf.signature, ("1","right","Vincent"))
-        self.assertEqual(vals, [1, 1,"Vincent"])
-
-
+        vals = self.apply_signature(rrf.signature, ("1", "right", "Vincent"))
+        self.assertEqual(vals, [1, 1, "Vincent"])
 
 
 if __name__ == '__main__':

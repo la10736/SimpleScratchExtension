@@ -39,11 +39,13 @@ def _create_menu_checker(menu):
 
     return checker
 
+
 def _create_editable_menu_checker(menu):
     try:
         def_mapper = menu.get(None, str)
     except AttributeError:
         def_mapper = str
+
     def checker(v):
         if isinstance(menu, collections.Mapping):
             try:
@@ -56,7 +58,9 @@ def _create_editable_menu_checker(menu):
             else:
                 return def_mapper(v)
         raise TypeError("Menu must be a Mapping or Container")
+
     return checker
+
 
 def _desc_mapper(e, **kwargs):
     if e == "s":
@@ -67,7 +71,7 @@ def _desc_mapper(e, **kwargs):
         return to_bool
     if e.startswith("m.") or e.startswith("d."):
         mname = e[2:]
-        checker_factory = _create_menu_checker if e[0]=='m' else _create_editable_menu_checker
+        checker_factory = _create_menu_checker if e[0] == 'm' else _create_editable_menu_checker
         try:
             menu = kwargs[mname]
             if not isinstance(menu, (collections.Mapping, collections.Container)):
@@ -613,7 +617,52 @@ class RequesterFactory(SensorFactory):
 
 
 class Reporter(Sensor):
-    pass
+    def _resolve_values(self, *args):
+        if not self.signature:
+            return self._value
+        d = self._value
+        default = ""
+        for a in args:
+            default = d.get(None, default)
+            try:
+                d = d[a]
+            except KeyError:
+                return default
+        return d
+
+    def _set_value(self, value, *args):
+        with self._lock:
+            if not args:
+                self._value = value
+            else:
+                d = self._value
+                for a in args[:-1]:
+                    if not a in d:
+                        d[a] = {}
+                    d = d[a]
+                d[args[-1]] = value
+
+    def _convert_args(self, *args):
+        try:
+            return map(lambda x, y: x(y), self.signature, args)
+        except (ValueError, KeyError):
+            raise TypeError("Arguments don't fit signature {}".format(self.signature))
+
+    def get(self, *args):
+        if len(args) != len(self.signature):
+            raise TypeError("get must have {} arguments".format(len(self.signature)))
+        args = self._convert_args(*args)
+        v = self.do_read(*args) if hasattr(self, "do_read") else None
+        with self._lock:
+            if v is not None:
+                self._set_value(v, *args)
+            return self._resolve_values(*args)
+
+    def set(self, value, *args):
+        if len(args) != len(self.signature):
+            raise TypeError("set must have {} arguments".format(len(self.signature)))
+        args = self._convert_args(*args)
+        self._set_value(value, *args)
 
 
 class ReporterFactory(SensorFactory):
