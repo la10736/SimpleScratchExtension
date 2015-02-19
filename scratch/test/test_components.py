@@ -1,5 +1,7 @@
 import threading
-from mock import ANY, DEFAULT, call
+
+from mock import ANY, call
+
 
 __author__ = 'michele'
 
@@ -1569,8 +1571,8 @@ class TestReporter(unittest.TestCase):
         r.set("GOLD", "john", 25, "male")
         self.assertEqual("GOLD", r.get("john", 25, "male"))
         self.assertEqual("MALE", r.get("sentinel", 32, "male"))
-        #Override
-        r.set("MaLe","sentinel", 32, "male")
+        # Override
+        r.set("MaLe", "sentinel", 32, "male")
         self.assertEqual("MaLe", r.get("sentinel", 32, "male"))
 
         self.assertRaises(KeyError, r.set, "GOLD", "sentinel", 32, "MALE")
@@ -1581,26 +1583,56 @@ class TestReporter(unittest.TestCase):
     def test_do_read(self):
         self.fail("Not Implemented Yet")
 
-    @patch("threading.RLock")
+    @patch("threading.RLock", autospec=True)
     def test_get_and_set_synchronize(self, m_lock):
-        self.fail("Not Implemented Yet")
-        # m_lock = m_lock.return_value
-        # mock_e = Mock()  # Mock the extension
-        # mock_sf = Mock()  # Mock the sensor info
-        # s = S(mock_e, mock_sf, value=56)
-        # s.get()
-        # self.assertTrue(m_lock.__enter__.called)
-        # self.assertTrue(m_lock.__exit__.called)
-        # m_lock.reset_mock()
-        # s.set("ss")
-        # self.assertTrue(m_lock.__enter__.called)
-        # self.assertTrue(m_lock.__exit__.called)
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock extension
+        mock_rf = Mock(signature=())  # Mock reporter info
+        r = RR(mock_e, mock_rf, value=56)
+        r.get()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        r.set("ss")
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+
+        """Change signature"""
+        mock_rf.signature=(float, str)
+        r = RR(mock_e, mock_rf, value={})
+        r.get(1.0, "Robert")
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        r.set("ss", 1.0, "Robert")
 
     def test_value(self):
         """1) return last computed value
+           1-a) if signature is empty return value
+           1-b) return a dictionary of resolved result
            2) synchronize
         """
-        self.fail("Not Implemented Yet")
+        mock_e = Mock()  # Mock extension
+        mock_rf = Mock(signature=())  # Mock reporter info
+        r = RR(mock_e, mock_rf, value=56)
+        self.assertEqual(56, r.value)
+        r.set("ss")
+        self.assertEqual("ss", r.value)
+
+        """Simple case: one menue exstension"""
+        rrf = RRF(mock_e, 'test', description="Numbers of %m.gender", gender=["male", "female"])
+        vals = {"male":12, "female":32}
+        r = RR(mock_e, rrf, value=vals)
+        self.assertDictEqual(vals, r.value)
+        """Must be a copy"""
+        v = r.value
+        v["male"] = 1
+        self.assertEqual(vals["male"], 12)
+        self.assertDictEqual(vals, r.value)
+
+        self.fail("More menues, some default, some no menu values")
+        self.fail("synchronize")
 
     def test_get_cgi(self):
         self.fail("Not Implemented Yet")

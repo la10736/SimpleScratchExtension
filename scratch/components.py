@@ -234,6 +234,10 @@ class Sensor(Block):
 
     def __init__(self, extension, info, value=None):
         v = value if value is not None else info.default
+        try:
+            v = copy.deepcopy(v)
+        except AttributeError:
+            pass
         super(Sensor, self).__init__(extension=extension, info=info, value=v)
 
     @property
@@ -629,6 +633,12 @@ class Reporter(Sensor):
             except KeyError:
                 return default
         return d
+
+    @property
+    def value(self):
+        """Last value"""
+        with self._lock:
+            return copy.deepcopy(self._value)
 
     def _set_value(self, value, *args):
         with self._lock:
