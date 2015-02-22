@@ -1,4 +1,5 @@
 import copy
+import inspect
 import logging
 import threading
 import urllib.parse
@@ -27,18 +28,48 @@ def to_bool(val):
 _description_parser = re.compile("%(s|n|b|m\.[^\s.]+|d\.[^\s.]+)")
 
 
+class _Checker:
+    def __init__(self, menu, def_mapper=None):
+        self._menu = menu
+        if def_mapper is not None:
+            self._def_mapper = def_mapper
+
+    def _def_mapper(self, v):
+        raise KeyError("Menu doesn't contain key {}".format(v))
+
+
+class _CheckerMapper(_Checker):
+    def __call__(self, v):
+        try:
+            return self._menu[v]
+        except KeyError:
+            return self._def_mapper(v)
+
+    @property
+    def elements(self):
+        return set(self._menu.keys())
+
+
+class _CheckerContainer(_Checker):
+    def __call__(self, v):
+        if v in self._menu:
+            return v
+        else:
+            return self._def_mapper(v)
+
+    @property
+    def elements(self):
+        return set(self._menu.copy())
+
+
 def _create_menu_checker(menu):
-    def checker(v):
-        if isinstance(menu, collections.Mapping):
-            return menu[v]
-        elif isinstance(menu, collections.Container):
-            if v in menu:
-                return v
-            raise KeyError("Menu doesn't contain key {}".format(v))
-
-
+    if isinstance(menu, collections.Mapping):
+        checker = _CheckerMapper(menu)
+    elif isinstance(menu, collections.Container):
+        checker = _CheckerContainer(menu)
+    else:
+        raise TypeError("Menu must be a Mapping or Container")
     return checker
-
 
 def _create_editable_menu_checker(menu):
     try:
@@ -46,18 +77,13 @@ def _create_editable_menu_checker(menu):
     except AttributeError:
         def_mapper = str
 
-    def checker(v):
-        if isinstance(menu, collections.Mapping):
-            try:
-                return menu[v]
-            except KeyError:
-                return def_mapper(v)
-        elif isinstance(menu, collections.Container):
-            if v in menu:
-                return v
-            else:
-                return def_mapper(v)
+    if isinstance(menu, collections.Mapping):
+        checker = _CheckerMapper(menu, def_mapper)
+    elif isinstance(menu, collections.Container):
+        checker = _CheckerContainer(menu, def_mapper)
+    else:
         raise TypeError("Menu must be a Mapping or Container")
+
 
     return checker
 
@@ -105,6 +131,7 @@ class BlockFactory():
         self._name = name
         self._menu_dict = copy.deepcopy(menus)
         self._description = description if description is not None else self._name
+        self._signature = parse_description(self.description, **self._menu_dict)
 
     @property
     def ed(self):
@@ -132,8 +159,11 @@ class BlockFactory():
         b = self.block_constructor(extension, self, *args, **kwargs)
         if cb is not None:
             setattr(b, self.cb_arg, cb)
-            b.do_read = cb
         return b
+
+    @property
+    def signature(self):
+        return self._signature
 
 
 class Block():
@@ -141,8 +171,13 @@ class Block():
         self._ex = weakref.ref(extension)
         self._info = info
         self._value = value
+        self._fix_value()
         self._lock = threading.RLock()
         self._busy = set()
+
+    def _fix_value(self):
+        if len(self.signature) and not isinstance(self._value, collections.Mapping):
+            self._value = {None: self._value}
 
     @property
     def extension(self):
@@ -621,6 +656,17 @@ class RequesterFactory(SensorFactory):
 
 
 class Reporter(Sensor):
+
+    @staticmethod
+    def create(extension, name, default=None, description=None, **kwargs):
+        do_read = extract_arg("do_read", kwargs)
+        factory = ReporterFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        if do_read:
+            if len(inspect.getargspec(do_read)[0]) != len(factory.signature):
+                raise TypeError("do_read should match the signature {}".format(factory.signature))
+        return factory.create(extension=extension, do_read=do_read)
+
+
     def _resolve_values(self, *args):
         if not self.signature:
             return self._value
@@ -638,7 +684,32 @@ class Reporter(Sensor):
     def value(self):
         """Last value"""
         with self._lock:
-            return copy.deepcopy(self._value)
+            signature = self.signature
+            l = len(signature)
+            if not l:
+                return self._value
+            values = {}
+            stack = [([], self._value, values)]
+            for s in signature:
+                l -= 1
+                new_stack=[]
+                try:
+                    other = s.elements
+                except AttributeError:
+                    other = set()
+                while stack:
+                    args,src,dst = stack.pop()
+                    elements = {e for e in other.copy().union(src.keys()) if e is not None}
+                    for e in elements:
+                        new_args = args.copy()+[e]
+                        if l:
+                            d = {}
+                            dst[e] = d
+                            new_stack += [(new_args, src.get(e,{}), d)]
+                        else:
+                            dst[e] = self._resolve_values(*new_args)
+                stack = new_stack
+            return values
 
     def _set_value(self, value, *args):
         with self._lock:
@@ -661,7 +732,7 @@ class Reporter(Sensor):
     def get(self, *args):
         if len(args) != len(self.signature):
             raise TypeError("get must have {} arguments".format(len(self.signature)))
-        args = self._convert_args(*args)
+        args = tuple(self._convert_args(*args))
         v = self.do_read(*args) if hasattr(self, "do_read") else None
         with self._lock:
             if v is not None:
@@ -674,10 +745,30 @@ class Reporter(Sensor):
         args = self._convert_args(*args)
         self._set_value(value, *args)
 
+    def poll(self):
+        if not self.signature:
+            return {self.name: self.get()}
+        """Otherwise we cannot know hot to call get() we must use last computed value"""
+        return {self.name: self.value}
+
+    def _sync_cgi(self, request):
+        _name, args = self._get_request_data(request.path)
+        return str(self.get(*self._convert_args(*args)))
+
+    def get_cgi(self, path):
+        if not path.startswith("/"):
+            return None
+        name, args = self._get_request_data(path)
+        if name != self.name:
+            return None
+        if len(args) != len(self.signature):
+            return None
+        try:
+            args = tuple(self._convert_args(*args))
+        except (ValueError, KeyError):
+            return None
+        return CGI(self._sync_cgi)
+
 
 class ReporterFactory(SensorFactory):
     block_constructor = Reporter
-
-    @property
-    def signature(self):
-        return parse_description(self.description, **self._menu_dict)
