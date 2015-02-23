@@ -171,13 +171,8 @@ class Block():
         self._ex = weakref.ref(extension)
         self._info = info
         self._value = value
-        self._fix_value()
         self._lock = threading.RLock()
         self._busy = set()
-
-    def _fix_value(self):
-        if len(self.signature) and not isinstance(self._value, collections.Mapping):
-            self._value = {None: self._value}
 
     @property
     def extension(self):
@@ -268,12 +263,25 @@ class Sensor(Block):
         return factory.create(extension=extension, do_read=do_read)
 
     def __init__(self, extension, info, value=None):
+        v = self._get_default_value(value, info)
+        super().__init__(extension, info, value=v)
+
+    def _get_default_value(self, value=None, info=None):
+        if info is None:
+            info = self._info
         v = value if value is not None else info.default
         try:
             v = copy.deepcopy(v)
         except AttributeError:
             pass
-        super(Sensor, self).__init__(extension=extension, info=info, value=v)
+        if len(info.signature) and not isinstance(v, collections.Mapping):
+            v = {None: v}
+        return v
+
+    def reset(self):
+        with self._lock:
+            self._value = self._get_default_value()
+            self.do_reset()
 
     @property
     def value(self):
@@ -296,7 +304,7 @@ class Sensor(Block):
         self._set_value(value)
 
     def poll(self):
-        return {self.name: self.get()}
+        return {(): self.get()}
 
 
 class SensorFactory(BlockFactory):
@@ -680,10 +688,7 @@ class Reporter(Sensor):
                 return default
         return d
 
-    @property
-    def value(self):
-        """Last value"""
-        with self._lock:
+    def _values_dict(self, flat=False):
             signature = self.signature
             l = len(signature)
             if not l:
@@ -704,12 +709,23 @@ class Reporter(Sensor):
                         new_args = args.copy()+[e]
                         if l:
                             d = {}
-                            dst[e] = d
+                            if not flat:
+                               dst[e] = d
                             new_stack += [(new_args, src.get(e,{}), d)]
                         else:
-                            dst[e] = self._resolve_values(*new_args)
+                            v = self._resolve_values(*new_args)
+                            if not flat:
+                                dst[e] = v
+                            else:
+                                values[tuple(new_args)] = v
                 stack = new_stack
             return values
+
+    @property
+    def value(self):
+        """Last value"""
+        with self._lock:
+            return self._values_dict(flat=False)
 
     def _set_value(self, value, *args):
         with self._lock:
@@ -747,9 +763,10 @@ class Reporter(Sensor):
 
     def poll(self):
         if not self.signature:
-            return {self.name: self.get()}
+            return {(): self.get()}
         """Otherwise we cannot know hot to call get() we must use last computed value"""
-        return {self.name: self.value}
+        with self._lock:
+            return self._values_dict(flat=True)
 
     def _sync_cgi(self, request):
         _name, args = self._get_request_data(request.path)

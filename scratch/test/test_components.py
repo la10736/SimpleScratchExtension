@@ -1,3 +1,4 @@
+import copy
 import threading
 
 from mock import ANY, call, MagicMock
@@ -230,9 +231,9 @@ class TestSensor(unittest.TestCase):
 
         mock_e = Mock()
         s = S.create(mock_e, "sensor", do_read=r)
-        self.assertDictEqual({"sensor": v}, s.poll())
+        self.assertDictEqual({(): v}, s.poll())
         v = 13
-        self.assertDictEqual({"sensor": v}, s.poll())
+        self.assertDictEqual({(): v}, s.poll())
 
 
 class TestCommandFactory(unittest.TestCase):
@@ -1602,30 +1603,41 @@ class TestReporter(unittest.TestCase):
         rrf = RRF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
         r = RR(mock_e, rrf)
         orig_d = {k: {j: "" for j in ["c", "d"]} for k in ["a", "b"]}
-        d = orig_d.copy()
+
+        d = copy.deepcopy(orig_d)
+        orig_results = {(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}
+        results = orig_results.copy()
         self.assertDictEqual(d, r.value)
-        self.assertDictEqual({"test": d}, r.poll())
-        r.set(33, "a","c")
-        d["a"]["c"]=33
+        self.assertDictEqual(results, r.poll())
+        r.set(33, "a", "c")
+        d["a"]["c"] = results[("a", "c")] = 33
         self.assertDictEqual(d, r.value)
-        self.assertDictEqual({"test": d}, r.poll())
+        self.assertDictEqual(results, r.poll())
         r.reset()
         self.assertDictEqual(orig_d, r.value)
-        self.assertDictEqual({"test": orig_d}, r.poll())
+        self.assertDictEqual(orig_results, r.poll())
 
         """No trivial default"""
-        r = RR(mock_e, rrf, value={None:45, "a":{"d":30},"b":{None: 19}})
-        orig_d = {"a":{"c":45,"d":30}, "b":{"c":19,"d":19}}
-        d = orig_d.copy()
+        rrf = RRF(mock_e, 'test', default={None: 45, "a": {"d": 30}, "b": {None: 19}},
+                  description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
+        r = RR(mock_e, rrf)
+        orig_d = {"a": {"c": 45, "d": 30}, "b": {"c": 19, "d": 19}}
+        d = copy.deepcopy(orig_d)
+        orig_results = {("a", "c"): 45,
+                        ("a", "d"): 30,
+                        ("b", "c"): 19,
+                        ("b", "d"): 19,
+        }
+        results = orig_results.copy()
         self.assertDictEqual(d, r.value)
-        self.assertDictEqual({"test": d}, r.poll())
-        r.set(-3, "a","c")
-        d["a"]["c"]=-3
+        self.assertDictEqual(results, r.poll())
+        r.set(-3, "a", "c")
+        d["a"]["c"] = results[("a", "c")] = -3
         self.assertDictEqual(d, r.value)
-        self.assertDictEqual({"test": d}, r.poll())
+        self.assertDictEqual(results, r.poll())
         r.reset()
         self.assertDictEqual(orig_d, r.value)
-        self.assertDictEqual({"test": orig_d}, r.poll())
+        self.assertDictEqual(orig_results, r.poll())
 
     def test_do_read(self):
         mock_e = Mock()  # Mock the extension
@@ -1764,14 +1776,14 @@ class TestReporter(unittest.TestCase):
         """execute in line get() method"""
         cgi = r.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
-        r.do_read = lambda : 54321
+        r.do_read = lambda: 54321
         self.assertEqual("54321", cgi(Mock(path="My%20Name")))
 
         """More args return None"""
         self.assertIsNone(r.get_cgi("/My%20Name/1234"))
 
         rrf = RRF(mock_e, 'My Name', description="string %s number %n boolean %b menu %m.menu editable menu %d.ed_menu",
-                  menu=["a","b"], ed_menu=["c", "d"])
+                  menu=["a", "b"], ed_menu=["c", "d"])
         r = RR(mock_e, rrf)
         self.assertIsNone(r.get_cgi("/My%20Name"))
         self.assertIsNone(r.get_cgi("/My%20Name/test"))
@@ -1780,7 +1792,7 @@ class TestReporter(unittest.TestCase):
         self.assertIsNone(r.get_cgi("/My%20Name/test/1.2/true/a"))
         cgi = r.get_cgi("/My%20Name/test/1.2/true/a/k")
         self.assertIsNotNone(cgi)
-        r.do_read = lambda *args: ",".join(map(str,args))
+        r.do_read = lambda *args: ",".join(map(str, args))
         self.assertEqual("test,1.2,True,a,k", cgi(Mock(path="My%20Name/test/1.2/true/a/k")))
         self.assertIsNone(r.get_cgi("/My%20Name/test/aa/true/a/d"))
         self.assertIsNone(r.get_cgi("/My%20Name/test/1/false/d/d"))
@@ -1802,10 +1814,12 @@ class TestReporter(unittest.TestCase):
         self.assertEqual(r.get(), "goofy")
 
         """Wrong do_read() signature"""
-        self.assertRaises(TypeError, RR.create,mock_e, "reporter2", default="S", description="string %s",
+        self.assertRaises(TypeError, RR.create, mock_e, "reporter2", default="S", description="string %s",
                           do_read=do_read)
+
         def do_read(v):
             return v.upper()
+
         r = RR.create(mock_e, "reporter2", default="S", description="string %s", do_read=do_read)
         self.assertEqual(r.get("goofy"), "GOOFY")
 
@@ -1814,27 +1828,27 @@ class TestReporter(unittest.TestCase):
         mock_e = Mock()  # Mock extension
         rrf = RRF(mock_e, 'test', description="Base")
         r = RR(mock_e, rrf)
-        self.assertDictEqual({'test': ''}, r.poll())
+        self.assertDictEqual({(): ''}, r.poll())
         r = RR(mock_e, rrf, value=32)
-        self.assertDictEqual({'test': 32}, r.poll())
+        self.assertDictEqual({(): 32}, r.poll())
         r.set(88)
-        self.assertDictEqual({'test': 88}, r.poll())
+        self.assertDictEqual({(): 88}, r.poll())
         v = 99
         r.do_read = lambda: v
-        self.assertDictEqual({'test': 99}, r.poll())
+        self.assertDictEqual({(): 99}, r.poll())
         v = 77
-        self.assertDictEqual({'test': 77}, r.poll())
+        self.assertDictEqual({(): 77}, r.poll())
 
     def test_poll_menues(self):
         mock_e = Mock()  # Mock extension
         rrf = RRF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
         r = RR(mock_e, rrf)
-        self.assertDictEqual({"test": {k: {j: "" for j in ["c", "d"]} for k in ["a", "b"]}}, r.poll())
+        self.assertDictEqual({(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}, r.poll())
         r = RR(mock_e, rrf, value=32)
-        d = {"test": {k: {j: 32 for j in ["c", "d"]} for k in ["a", "b"]}}
+        d = {(k, j): 32 for k in ["a", "b"] for j in ["c", "d"]}
         self.assertDictEqual(d, r.poll())
         r.set(1, "a", "d")
-        d["test"]["a"]["d"] = 1
+        d[("a", "d")] = 1
         self.assertDictEqual(d, r.poll())
         v = 99
         r.do_read = lambda a, b: v
@@ -1842,18 +1856,18 @@ class TestReporter(unittest.TestCase):
         self.assertDictEqual(d, r.poll())
         """get() call do_read()"""
         r.get("b", "c")
-        d["test"]["b"]["c"] = 99
+        d[("b", "c")] = 99
         self.assertDictEqual(d, r.poll())
 
     def test_poll_other(self):
         mock_e = Mock()  # Mock extension
         rrf = RRF(mock_e, 'test', description="string %s number %n boolean %b")
         r = RR(mock_e, rrf)
-        self.assertDictEqual({'test': {}}, r.poll())
+        self.assertDictEqual({}, r.poll())
         r.set(2, "val", 1.2, True)
-        self.assertDictEqual({'test': {'val': {1.2: {True: 2}}}}, r.poll())
+        self.assertDictEqual({('val', 1.2, True): 2}, r.poll())
         r.set(7, "val", 2.2, False)
-        self.assertDictEqual({'test': {'val': {1.2: {True: 2}, 2.2: {False: 7}}}}, r.poll())
+        self.assertDictEqual({('val', 1.2, True): 2, ('val', 2.2, False): 7}, r.poll())
 
 
 class TestReporterFactory(unittest.TestCase):
@@ -1922,8 +1936,9 @@ class TestReporterFactory(unittest.TestCase):
         self.assertIs(r.extension, mock_extension)
         self.assertIs(r.info, rrf)
         self.assertEqual(r.get("www"), "")
-        r.do_read = lambda v:v.upper()
+        r.do_read = lambda v: v.upper()
         self.assertEqual(r.get("www"), "WWW")
+
 
 if __name__ == '__main__':
     unittest.main()

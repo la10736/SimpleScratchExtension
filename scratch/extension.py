@@ -166,7 +166,9 @@ class Extension():
     def poll(self):
         values = {}
         for c in self.components:
-            values.update(c.poll())
+            p = c.poll()
+            if c:
+                values.update({(c.name,)+k:v for k,v in p.items()})
         return values
 
     @property

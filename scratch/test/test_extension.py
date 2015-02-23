@@ -168,6 +168,9 @@ class TestExstensionDefinition(unittest.TestCase):
         ci = ed.get_component_info("request")
         self.assertIs(ci, ri)
 
+    def test_add_reporter(self):
+        self.fail("NOT IMPLEMENTED YET")
+
 
 class TestExtensionBase(unittest.TestCase):
     """Test the extension base object.
@@ -309,11 +312,13 @@ class TestExtension(unittest.TestCase):
 
         ed.add_sensor("s0", value="S")
         e = EB(ed)
-        self.assertDictEqual({"s0": "S"}, e.poll())
+        self.assertDictEqual({("s0",): "S"}, e.poll())
 
         ed.add_sensor("s1", value=1)
         e = EB(ed)
-        self.assertDictEqual({"s0": "S", "s1": 1}, e.poll())
+        self.assertDictEqual({("s0",): "S", ("s1",): 1}, e.poll())
+
+        self.fail("ADD REPORTER")
 
         """SAnity chack"""
         """hat, command and waitercommand ... no contribution """
@@ -323,7 +328,7 @@ class TestExtension(unittest.TestCase):
         ed.add_requester("R0", value=12)
         ed.add_requester("R1", value="AA")
         e = EB(ed)
-        self.assertDictEqual({"s0": "S", "s1": 1}, e.poll())
+        self.assertDictEqual({("s0",): "S", ("s1",): 1}, e.poll())
 
     def test_busy(self):
         """Return the busy set of all components"""
