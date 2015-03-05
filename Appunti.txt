@@ -52,3 +52,11 @@ Aprire i ticket su scratch
 2) Sostenere i booleani bloccanti #575
 3) Proporre implementazione hat come booleani bloccanti (#233)
 4) Forum http://scratch.mit.edu/discuss/32/
+
+TODO LIST:
+- Ritornare i menu nelle descrizioni
+- Rimuovere Sensor o farlo sottoclasse dei Reporter
+- Commands con argomenti
+- Riposta home servizio con jason della descrizione
+- Minisito (Flask?) con link dei servizi registrati: i servizi si registrano via web
+- Fixare il microsito Flask

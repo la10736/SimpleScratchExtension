@@ -6,7 +6,7 @@ import scratch
 __author__ = 'michele'
 import unittest
 from scratch.portability.mock import patch, Mock, PropertyMock, MagicMock
-from scratch.extension import ExtensionDefinition as ED
+from scratch.extension import ExtensionDefinition as ED, render_args
 from scratch.extension import Extension as E
 from scratch.extension import ExtensionService as ES, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
 from scratch.extension import ExtensionBase as EB
@@ -169,7 +169,14 @@ class TestExstensionDefinition(unittest.TestCase):
         self.assertIs(ci, ri)
 
     def test_add_reporter(self):
-        self.fail("NOT IMPLEMENTED YET")
+        ed = ED("MyName")
+        r = ed.add_reporter(name="reporter", description="%m.names age",
+                            names=["Mark", "Alexander"])  # return reporter info
+        self.assertIsNotNone(r)
+        cc = ed.components
+        self.assertEqual(1, len(cc))
+        ci = ed.get_component_info("reporter")
+        self.assertIs(ci, r)
 
 
 class TestExtensionBase(unittest.TestCase):
@@ -318,7 +325,15 @@ class TestExtension(unittest.TestCase):
         e = EB(ed)
         self.assertDictEqual({("s0",): "S", ("s1",): 1}, e.poll())
 
-        self.fail("ADD REPORTER")
+        ed.add_reporter("r0", value=1)
+        e = EB(ed)
+        self.assertDictEqual({("s0",): "S", ("s1",): 1, ("r0",): 1}, e.poll())
+
+        ed.add_reporter("r1", value={None: "female", "Jhon": "male"}, description="Get %m.names gender",
+                        names=["Jhon", "Lucy", "Lisa"])
+        e = EB(ed)
+        self.assertDictEqual({("s0",): "S", ("s1",): 1, ("r0",): 1, ("r1", "Jhon"): "male", ("r1", "Lucy"): "female",
+                              ("r1", "Lisa"): "female"}, e.poll())
 
         """SAnity chack"""
         """hat, command and waitercommand ... no contribution """
@@ -328,7 +343,8 @@ class TestExtension(unittest.TestCase):
         ed.add_requester("R0", value=12)
         ed.add_requester("R1", value="AA")
         e = EB(ed)
-        self.assertDictEqual({("s0",): "S", ("s1",): 1}, e.poll())
+        self.assertDictEqual({("s0",): "S", ("s1",): 1, ("r0",): 1, ("r1", "Jhon"): "male", ("r1", "Lucy"): "female",
+                              ("r1", "Lisa"): "female"}, e.poll())
 
     def test_busy(self):
         """Return the busy set of all components"""
@@ -352,13 +368,13 @@ class TestExtension(unittest.TestCase):
         ed = ED("def")
 
         e = EB(ed)
-        self.assertEqual(([], []), e.results)
+        self.assertEqual([], e.results)
 
         ed.add_requester("R0", value=12)
         ed.add_requester("R1", value="AA")
         e = EB(ed)
 
-        self.assertEqual(([], []), e.results)
+        self.assertEqual([], e.results)
 
         r0, r1 = e.get_component("R0"), e.get_component("R1")
         r0.get_async(123)
@@ -367,20 +383,18 @@ class TestExtension(unittest.TestCase):
         r1.get_async(21)
         r0.set("a")
         r1.set("b")
-        res,prb=e.results
-        self.assertSetEqual({(123,"a"),(321,"a"),(23,"b"),(21,"b")}, set(res))
-        self.assertFalse(prb)
-        """add a problem"""
+        res = e.results
+        self.assertSetEqual({(123, "a"), (321, "a"), (23, "b"), (21, "b")}, set(res))
+        """Catch problems"""
+
         def do_read():
             raise Exception("problem")
+
         r0.do_read = do_read
         r0.get_async(333)
         time.sleep(0.01)
-        self.assertEqual((
-            [(333,"invalid")],
-            ["[R0] : problem"]), e.results)
-
-
+        self.assertEqual([(333, "invalid")], e.results)
+        self.assertEqual("[R0] : problem", e.problem)
 
         """SAnity chack"""
         """hat, command and waitercommand ... no contribution """
@@ -390,9 +404,8 @@ class TestExtension(unittest.TestCase):
         ed.add_command("x1")
         ed.add_waiter_command("x2")
         e = EB(ed)
-        self.assertDictEqual({"s0": "S", "s1": 1}, e.poll())
+        self.assertDictEqual({("s0",): "S", ("s1",): 1}, e.poll())
         e.results
-
 
 
 @patch("scratch.extension.Extension.components", new_callable=PropertyMock)
@@ -473,6 +486,7 @@ class TestExtensionService(unittest.TestCase):
         res["blockSpecs"] = block_specs
         m_extension_block_specs.return_value = block_specs
         self.assertDictEqual(res, es.description)
+        self.fail("Must return menues too")
 
     def test_addr_port_proxy(self):
         es = ES(E(), "MyName")
@@ -481,14 +495,22 @@ class TestExtensionService(unittest.TestCase):
         self.assertIs(es.address, es._http.server_name)
         self.assertIs(es.port, es._http.server_port)
 
+    def test_render_args(self):
+        """Get args and return quoted url"""
+        self.assertEqual("a", render_args("a"))
+        self.assertEqual("a/b%20c/2/true/false",
+                         render_args("a","b c", 2, True, False))
+
     def test_poll_dict_render(self):
-        lines = ["a VV", "c DD", "vujdvj cveo djicvo wcowio"]
-        d = dict([s.split(" ", 1) for s in lines])
-        self.assertSetEqual(set(ES.poll_dict_render(d).split("\n")[:-1]),
-                            set(lines))
-        self.fail("nome deve essere una stringa o una tupla. il risultato deve essere urlencoded "
-                  "per ogni elemento della tupla del nome es uniti con /. Il valore deve essere url"
-                  "encoded.")
+        """Simple: just one"""
+        self.assertEqual("a 1\n", ES.poll_dict_render({("a",):1}))
+        self.assertEqual("a my%20beautiful%20phrase\n", ES.poll_dict_render({("a",):"my beautiful phrase"}))
+
+        self.assertEqual("a/b%20c/true my%20beautiful%20phrase\n",
+                         ES.poll_dict_render({("a","b c", True):"my beautiful phrase"}))
+
+        self.assertSetEqual({"a 1","a/a%20b cc","c/true dd"}, set(ES.poll_dict_render(
+            {("a",):1,("a", "a b"):"cc",("c", True):"dd" })[:-1].split("\n")))
 
     def test_busy_render(self):
         self.assertEqual("", ES.busy_render(set()))
@@ -506,24 +528,37 @@ class TestExtensionService(unittest.TestCase):
                             set(r[:-1].split("\n")))
 
 
-
-
     def test_problems_render(self):
-        self.fail("IMPLEMENT")
+        es = ES(E(), "MyName")
+        self.assertEqual("", es.problem_render(""))
+        self.assertEqual("_problem My Problem\n", es.problem_render("My Problem"))
 
+    @patch("scratch.extension.Extension.problem", new_callable=PropertyMock)
+    @patch("scratch.extension.ExtensionService.problem_render", return_value="problem_render\n")
+    @patch("scratch.extension.Extension.results", new_callable=PropertyMock)
+    @patch("scratch.extension.ExtensionService.results_render", return_value="results_render\n")
     @patch("scratch.extension.Extension.busy", new_callable=PropertyMock)
     @patch("scratch.extension.ExtensionService.busy_render", return_value="busy_render\n")
     @patch("scratch.extension.Extension.poll")
     @patch("scratch.extension.ExtensionService.poll_dict_render", return_value="dict_render\n")
-    def test__poll_cgi(self, mock_poll_dict_render, mock_poll, mock_busy_render, mock_busy):
+    def test__poll_cgi(self, mock_poll_dict_render, mock_poll, mock_busy_render, mock_busy,
+                       mock_results_render, mock_results, mock_problem_render, mock_problem):
         es = ES(E(), "MyName")
         self.assertEqual(es._poll_cgi(Mock(autospec=ES.HTTPHandler)), mock_poll_dict_render.return_value +
-                         mock_busy_render.return_value)
+                         mock_busy_render.return_value + mock_results_render.return_value +
+                         mock_problem_render.return_value)
         self.assertTrue(mock_poll.called)
         mock_poll_dict_render.assert_called_with(mock_poll.return_value)
         self.assertTrue(mock_busy.called)
         mock_busy_render.assert_called_with(mock_busy.return_value)
-        self.fail("Add results and problems")
+        self.assertTrue(mock_busy.called)
+        mock_busy_render.assert_called_with(mock_busy.return_value)
+        mock_results_render.assert_called_with(mock_results.return_value)
+        self.assertTrue(mock_results.called)
+        mock_results_render.assert_called_with(mock_results.return_value)
+        mock_problem_render.assert_called_with(mock_problem.return_value)
+        self.assertTrue(mock_problem.called)
+        mock_problem_render.assert_called_with(mock_problem.return_value)
 
     @patch("threading.Thread", autospec=True)
     def test_start(self, mock_thread):

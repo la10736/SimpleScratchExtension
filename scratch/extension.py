@@ -3,9 +3,11 @@ import io
 import logging
 from socketserver import ThreadingMixIn
 import threading
+import urllib
 import weakref
 from scratch.cgi import CGI
-from scratch.components import SensorFactory, CommandFactory, HatFactory, WaiterCommandFactory, RequesterFactory
+from scratch.components import SensorFactory, CommandFactory, HatFactory, WaiterCommandFactory, RequesterFactory, \
+    ReporterFactory
 
 __author__ = 'michele'
 
@@ -114,6 +116,10 @@ class ExtensionDefinition():
         """Create and register a requester description"""
         return self._create_and_register(RequesterFactory, name=name, default=value, description=description)
 
+    def add_reporter(self, name, value="", description=None, **menus):
+        """Create and register a reporter description"""
+        return self._create_and_register(ReporterFactory, name=name, default=value, description=description, **menus)
+
     def get_component_info(self, name):
         return self._components[name]
 
@@ -125,6 +131,7 @@ class Extension():
         self._components = {}
         self._init_components()
         self._factory = None
+        self._problem = ""
 
     @property
     def factory(self):
@@ -181,7 +188,6 @@ class Extension():
     @property
     def results(self):
         results = []
-        problems = []
         for c in self.components:
             try:
                 rs = c.get_results()
@@ -191,8 +197,16 @@ class Extension():
                 for busy, v, exception in rs:
                     results.append((busy, v))
                     if exception is not None:
-                        problems.append("[{}] : {}".format(c.name,str(exception)))
-        return results, problems
+                        self._problem = "[{}] : {}".format(c.name,str(exception))
+        return results
+
+    @property
+    def problem(self):
+        return self._problem
+
+    @problem.setter
+    def problem(self, value):
+        self._problem = value
 
     @property
     def block_specs(self):
@@ -202,6 +216,17 @@ class _BaseHttpMultithreadServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
     request_queue_size = DEFAULT_QUEUE_SIZE
+
+def _map_arg(arg):
+    if arg == True:
+        return "true"
+    elif arg == False:
+        return "false"
+    return str(arg)
+
+def render_args(*args):
+    return "/".join([urllib.parse.quote(_map_arg(a)) for a in args])
+
 
 class ExtensionService():
     """The extension service: create by a Extension object it binds the server that respond to
@@ -328,13 +353,15 @@ class ExtensionService():
         return ret
 
     def _poll_cgi(self, handler):
-        return self.poll_dict_render(self._extension.poll()) + self.busy_render(self._extension.busy)
+        return self.poll_dict_render(self._extension.poll()) + self.busy_render(self._extension.busy) + \
+               self.results_render(self._extension.results) + self.problem_render(self._extension.problem)
 
     @staticmethod
     def poll_dict_render(vals):
         sio = io.StringIO()
         for v, k in vals.items():
-            sio.write('%s %s\n' % (v, str(k)))
+            value = urllib.parse.quote(str(k))
+            sio.write('%s %s\n' % (render_args(*v), value))
         return sio.getvalue()
 
     @staticmethod
@@ -348,6 +375,12 @@ class ExtensionService():
         if not vals:
             return ""
         return "\n".join("_result {} {}".format(busy, val) for busy,val in vals)+"\n"
+
+    @staticmethod
+    def problem_render(problem):
+        if not problem:
+            return ""
+        return "_problem {}\n".format(problem)
 
     def _crossdomain_xml(self, request):
         return """<cross-domain-policy>
