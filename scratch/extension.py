@@ -212,6 +212,13 @@ class Extension():
     def block_specs(self):
         return [c.definition for c in self.components]
 
+    @property
+    def menus(self):
+        ret = {}
+        for c in self.components:
+            ret.update(c.info.menus)
+        return ret
+
 class _BaseHttpMultithreadServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -348,7 +355,8 @@ class ExtensionService():
     def description(self):
         ret = {"extensionName": self.name,
                "extensionPort": self.port,
-               "blockSpecs": self._extension.block_specs
+               "blockSpecs": self._extension.block_specs,
+               "menus": self._extension.menus
         }
         return ret
 

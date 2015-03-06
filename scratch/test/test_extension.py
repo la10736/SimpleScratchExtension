@@ -290,8 +290,7 @@ class TestExtension(unittest.TestCase):
         e._components = cmps
         self.assertEqual(set(cmps.keys()), set(e.components_name))
 
-    @patch("scratch.components.Sensor.definition", new_callable=PropertyMock)
-    def test_block_specs_empty(self, m_sensor_definition):
+    def test_block_specs_empty(self):
         e = E()
         self.assertListEqual([], e.block_specs)
 
@@ -311,6 +310,38 @@ class TestExtension(unittest.TestCase):
         definitions = [Mock() for _ in range(5)]
         m_sensor_definition.side_effect = definitions
         self.assertListEqual(definitions, e.block_specs)
+
+    def test_menus_empty(self):
+        e = E()
+        self.assertDictEqual({}, e.menus)
+
+    def test_menus_some_menus(self):
+        ed = ED("def")
+        ed.add_reporter("reporter 1", description="%m.first , %d.editable %m.last", first=["1", "2", "3"],
+                        editable=[11, 22, 33], last=["pen", "rubber", "rules"])
+        e = EB(ed)
+        self.assertDictEqual({"first": ["1", "2", "3"], "editable": [11, 22, 33],
+                              "last": ["pen", "rubber", "rules"]}, e.menus)
+        ed.add_reporter("reporter 2", description="%m.other", other=["a", "b", "c"])
+        e = EB(ed)
+        self.assertDictEqual({"first": ["1", "2", "3"], "editable": [11, 22, 33],
+                              "last": ["pen", "rubber", "rules"], "other": ["a", "b", "c"]}, e.menus)
+        "Sanity check"
+        ed.add_sensor("sensor")
+        e = EB(ed)
+        self.assertDictEqual({"first": ["1", "2", "3"], "editable": [11, 22, 33],
+                              "last": ["pen", "rubber", "rules"], "other": ["a", "b", "c"]}, e.menus)
+
+    def test_menus_some_menus_no_default_val_no_maps(self):
+        ed = ED("def")
+        ed.add_reporter("reporter 1", value={None:0}, description="%m.first", first=["1", "2", "3"])
+        e = EB(ed)
+        self.assertDictEqual({"first": ["1", "2", "3"]}, e.menus)
+
+        ed = ED("def2")
+        ed.add_reporter("reporter 1", description="%m.first", first={"1":1, "2":2, "3":3})
+        e = EB(ed)
+        self.assertDictEqual({"first": ["1", "2", "3"]}, e.menus)
 
     def test_poll(self):
         ed = ED("def")
@@ -472,21 +503,27 @@ class TestExtensionService(unittest.TestCase):
         self.assertIs(ess, ES.get_registered("donald duck"))
         self.assertRaises(KeyError, ES.get_registered, "minnie")
 
+    @patch("scratch.extension.Extension.menus", new_callable=PropertyMock)
     @patch("scratch.extension.Extension.block_specs", new_callable=PropertyMock)
-    def test_description(self, m_extension_block_specs):
+    def test_description(self, m_extension_block_specs, m_extension_menus):
         es = ES(E(), "MyName")
         block_specs = []
+        menus = {}
         res = {"extensionName": "MyName",
                "extensionPort": es.port,
-               "blockSpecs": []
+               "blockSpecs": [],
+               "menus": menus,
         }
         m_extension_block_specs.return_value = block_specs
+        m_extension_menus.return_value = menus
         self.assertDictEqual(res, es.description)
         block_specs = [Mock(), Mock()]
+        menus = {Mock(): Mock()}
         res["blockSpecs"] = block_specs
+        res["menus"] = menus
         m_extension_block_specs.return_value = block_specs
+        m_extension_menus.return_value = menus
         self.assertDictEqual(res, es.description)
-        self.fail("Must return menues too")
 
     def test_addr_port_proxy(self):
         es = ES(E(), "MyName")
@@ -499,18 +536,18 @@ class TestExtensionService(unittest.TestCase):
         """Get args and return quoted url"""
         self.assertEqual("a", render_args("a"))
         self.assertEqual("a/b%20c/2/true/false",
-                         render_args("a","b c", 2, True, False))
+                         render_args("a", "b c", 2, True, False))
 
     def test_poll_dict_render(self):
         """Simple: just one"""
-        self.assertEqual("a 1\n", ES.poll_dict_render({("a",):1}))
-        self.assertEqual("a my%20beautiful%20phrase\n", ES.poll_dict_render({("a",):"my beautiful phrase"}))
+        self.assertEqual("a 1\n", ES.poll_dict_render({("a",): 1}))
+        self.assertEqual("a my%20beautiful%20phrase\n", ES.poll_dict_render({("a",): "my beautiful phrase"}))
 
         self.assertEqual("a/b%20c/true my%20beautiful%20phrase\n",
-                         ES.poll_dict_render({("a","b c", True):"my beautiful phrase"}))
+                         ES.poll_dict_render({("a", "b c", True): "my beautiful phrase"}))
 
-        self.assertSetEqual({"a 1","a/a%20b cc","c/true dd"}, set(ES.poll_dict_render(
-            {("a",):1,("a", "a b"):"cc",("c", True):"dd" })[:-1].split("\n")))
+        self.assertSetEqual({"a 1", "a/a%20b cc", "c/true dd"}, set(ES.poll_dict_render(
+            {("a",): 1, ("a", "a b"): "cc", ("c", True): "dd"})[:-1].split("\n")))
 
     def test_busy_render(self):
         self.assertEqual("", ES.busy_render(set()))

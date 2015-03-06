@@ -165,6 +165,17 @@ class BlockFactory():
     def signature(self):
         return self._signature
 
+    @property
+    def menus(self):
+        ret = {}
+        for k,c in self.menu_dict.items():
+            if isinstance(c, collections.Mapping):
+                ret[k] = list(c.keys())
+            else:
+                ret[k] = c
+            ret[k].sort()
+        return ret
+
 
 class Block():
     def __init__(self, extension, info, value=None):

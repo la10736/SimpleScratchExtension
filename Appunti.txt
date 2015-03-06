@@ -54,7 +54,6 @@ Aprire i ticket su scratch
 4) Forum http://scratch.mit.edu/discuss/32/
 
 TODO LIST:
-- Ritornare i menu nelle descrizioni
 - Rimuovere Sensor o farlo sottoclasse dei Reporter
 - Commands con argomenti
 - Riposta home servizio con jason della descrizione

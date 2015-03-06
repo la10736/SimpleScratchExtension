@@ -1939,6 +1939,16 @@ class TestReporterFactory(unittest.TestCase):
         r.do_read = lambda v: v.upper()
         self.assertEqual(r.get("www"), "WWW")
 
+    def test_menus(self):
+        med = Mock()
+        rrf = RRF(med, 'test', description="%m.hands", hands=["left", "right"])
+        self.assertDictEqual({"hands":["left", "right"]}, rrf.menus)
+
+        """Pay attentiontion to mappers"""
+        rrf = RRF(med, 'test', description="%m.hands", hands={"Left":"left", "Right":"right"})
+        self.assertDictEqual({"hands":["Left", "Right"]}, rrf.menus)
+
+
 
 if __name__ == '__main__':
     unittest.main()

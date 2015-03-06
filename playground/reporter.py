@@ -14,7 +14,8 @@ DEFAULT_PORT = 55080
 
 class ExtensionReporter(Extension):
     def do_init_components(self):
-        self.reporter = Reporter.create(self, name="message", description="%m.coord value", coord={"x":0,"y":0})
+        self.reporter = Reporter.create(self, name="message", default={None:0}, description="%m.coord value",
+                                        coord=["x", "y"])
         return [self.reporter]
 
 
