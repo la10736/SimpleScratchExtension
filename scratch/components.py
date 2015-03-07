@@ -259,18 +259,15 @@ class Block():
         return {}
 
 
-class Sensor(Block):
-    """Sensor sono gli elementi base delle estensioni: Vengono costruiti in base a una
-    SensorFactory (del quale fanno da proxy per type, name, description es definition) es
-    espongono i metodi get() es set() per leggere es scrivere il valore.
-    Se il sensore implementa il metodo do_read() viene invocato per impostare il vaolre e
-    ritornarlo.
-    """
+class Reporter(Block):
 
     @staticmethod
     def create(extension, name, default=None, description=None, **kwargs):
         do_read = extract_arg("do_read", kwargs)
-        factory = SensorFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        factory = ReporterFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        if do_read:
+            if len(inspect.getargspec(do_read)[0]) != len(factory.signature):
+                raise TypeError("do_read should match the signature {}".format(factory.signature))
         return factory.create(extension=extension, do_read=do_read)
 
     def __init__(self, extension, info, value=None):
@@ -289,38 +286,126 @@ class Sensor(Block):
             v = {None: v}
         return v
 
-    def reset(self):
-        with self._lock:
-            self._value = self._get_default_value()
-            self.do_reset()
+    def _resolve_values(self, *args):
+        if not self.signature:
+            return self._value
+        d = self._value
+        default = ""
+        for a in args:
+            default = d.get(None, default)
+            try:
+                d = d[a]
+            except KeyError:
+                return default
+        return d
+
+    def _values_dict(self, flat=False):
+            signature = self.signature
+            l = len(signature)
+            if not l:
+                return self._value
+            values = {}
+            stack = [([], self._value, values)]
+            for s in signature:
+                l -= 1
+                new_stack=[]
+                try:
+                    other = s.elements
+                except AttributeError:
+                    other = set()
+                while stack:
+                    args,src,dst = stack.pop()
+                    elements = {e for e in other.copy().union(src.keys()) if e is not None}
+                    for e in elements:
+                        new_args = args.copy()+[e]
+                        if l:
+                            d = {}
+                            if not flat:
+                               dst[e] = d
+                            new_stack += [(new_args, src.get(e,{}), d)]
+                        else:
+                            v = self._resolve_values(*new_args)
+                            if not flat:
+                                dst[e] = v
+                            else:
+                                values[tuple(new_args)] = v
+                stack = new_stack
+            return values
 
     @property
     def value(self):
         """Last value"""
         with self._lock:
-            return self._value
+            return self._values_dict(flat=False)
 
-    def _set_value(self, value):
+    def _set_value(self, value, *args):
         with self._lock:
-            self._value = value
+            if not args:
+                self._value = value
+            else:
+                d = self._value
+                for a in args[:-1]:
+                    if not a in d:
+                        d[a] = {}
+                    d = d[a]
+                d[args[-1]] = value
 
-    def get(self):
-        v = self.do_read() if hasattr(self, "do_read") else None
+    def _convert_args(self, *args):
+        try:
+            return map(lambda x, y: x(y), self.signature, args)
+        except (ValueError, KeyError):
+            raise TypeError("Arguments don't fit signature {}".format(self.signature))
+
+    def get(self, *args):
+        if len(args) != len(self.signature):
+            raise TypeError("get must have {} arguments".format(len(self.signature)))
+        args = tuple(self._convert_args(*args))
+        v = self.do_read(*args) if hasattr(self, "do_read") else None
         with self._lock:
             if v is not None:
-                self._set_value(v)
-            return self._value
+                self._set_value(v, *args)
+            return self._resolve_values(*args)
 
-    def set(self, value):
-        self._set_value(value)
+    def set(self, value, *args):
+        if len(args) != len(self.signature):
+            raise TypeError("set must have {} arguments".format(len(self.signature)))
+        args = self._convert_args(*args)
+        self._set_value(value, *args)
+
+    def reset(self):
+        with self._lock:
+            self._value = self._get_default_value()
+            self.do_reset()
 
     def poll(self):
-        return {(): self.get()}
+        if not self.signature:
+            return {(): self.get()}
+        """Otherwise we cannot know hot to call get() we must use last computed value"""
+        with self._lock:
+            return self._values_dict(flat=True)
+
+    def _sync_cgi(self, request):
+        _name, args = self._get_request_data(request.path)
+        return str(self.get(*self._convert_args(*args)))
+
+    def get_cgi(self, path):
+        if not path.startswith("/"):
+            return None
+        name, args = self._get_request_data(path)
+        if name != self.name:
+            return None
+        if len(args) != len(self.signature):
+            return None
+        try:
+            args = tuple(self._convert_args(*args))
+        except (ValueError, KeyError):
+            return None
+        return CGI(self._sync_cgi)
 
 
-class SensorFactory(BlockFactory):
+class ReporterFactory(BlockFactory):
     type = "r"  # reporters
-    block_constructor = Sensor
+    block_constructor = Reporter
     cb_arg = "do_read"
 
     def __init__(self, ed, name, default="", description=None, **menus):
@@ -339,26 +424,50 @@ class SensorFactory(BlockFactory):
     def default(self):
         return self._default
 
+class Sensor(Reporter):
+    """A simple reporter without arguments
+    """
 
-class BooleanBlock(Sensor):
+    @staticmethod
+    def create(extension, name, default=None, description=None, **kwargs):
+        do_read = extract_arg("do_read", kwargs)
+        factory = SensorFactory(ed=None, name=name, default=default, description=description, **kwargs)
+        return factory.create(extension=extension, do_read=do_read)
+
+class SensorFactory(ReporterFactory):
+    block_constructor = Sensor
+
+
+class BooleanBlock(Reporter):
     @staticmethod
     def create(extension, name, default=None, description=None, **kwargs):
         do_read = extract_arg("do_read", kwargs)
         factory = BooleanFactory(ed=None, name=name, default=default, description=description, **kwargs)
         return factory.create(extension=extension, do_read=do_read)
 
-    def get(self):
-        return "true" if super().get() else "false"
+    def get(self, *args, **kwargs):
+        return "true" if super().get(*args, **kwargs) else "false"
 
-    def set(self, value=True):
-        super().set(bool(value))
+    def set(self, value=True, *args, **kwargs):
+        super().set(bool(value), *args, **kwargs)
 
     def clear(self):
         """Clear the value"""
-        self.set(False)
+        with self._lock:
+            if not self.signature:
+                self._value = False
+                return
+            stack = [self._value]
+            while stack:
+                d = stack.pop()
+                for k in d:
+                    if isinstance(d[k],collections.Mapping):
+                        stack.append(d[k])
+                    else:
+                        d[k] = False
 
 
-class BooleanFactory(SensorFactory):
+class BooleanFactory(ReporterFactory):
     type = "b"  # reporters
     block_constructor = BooleanBlock
 
@@ -672,131 +781,3 @@ class Requester(Sensor):
 class RequesterFactory(SensorFactory):
     type = "R"  # blocking reporter
     block_constructor = Requester
-
-
-class Reporter(Sensor):
-
-    @staticmethod
-    def create(extension, name, default=None, description=None, **kwargs):
-        do_read = extract_arg("do_read", kwargs)
-        factory = ReporterFactory(ed=None, name=name, default=default, description=description, **kwargs)
-        if do_read:
-            if len(inspect.getargspec(do_read)[0]) != len(factory.signature):
-                raise TypeError("do_read should match the signature {}".format(factory.signature))
-        return factory.create(extension=extension, do_read=do_read)
-
-
-    def _resolve_values(self, *args):
-        if not self.signature:
-            return self._value
-        d = self._value
-        default = ""
-        for a in args:
-            default = d.get(None, default)
-            try:
-                d = d[a]
-            except KeyError:
-                return default
-        return d
-
-    def _values_dict(self, flat=False):
-            signature = self.signature
-            l = len(signature)
-            if not l:
-                return self._value
-            values = {}
-            stack = [([], self._value, values)]
-            for s in signature:
-                l -= 1
-                new_stack=[]
-                try:
-                    other = s.elements
-                except AttributeError:
-                    other = set()
-                while stack:
-                    args,src,dst = stack.pop()
-                    elements = {e for e in other.copy().union(src.keys()) if e is not None}
-                    for e in elements:
-                        new_args = args.copy()+[e]
-                        if l:
-                            d = {}
-                            if not flat:
-                               dst[e] = d
-                            new_stack += [(new_args, src.get(e,{}), d)]
-                        else:
-                            v = self._resolve_values(*new_args)
-                            if not flat:
-                                dst[e] = v
-                            else:
-                                values[tuple(new_args)] = v
-                stack = new_stack
-            return values
-
-    @property
-    def value(self):
-        """Last value"""
-        with self._lock:
-            return self._values_dict(flat=False)
-
-    def _set_value(self, value, *args):
-        with self._lock:
-            if not args:
-                self._value = value
-            else:
-                d = self._value
-                for a in args[:-1]:
-                    if not a in d:
-                        d[a] = {}
-                    d = d[a]
-                d[args[-1]] = value
-
-    def _convert_args(self, *args):
-        try:
-            return map(lambda x, y: x(y), self.signature, args)
-        except (ValueError, KeyError):
-            raise TypeError("Arguments don't fit signature {}".format(self.signature))
-
-    def get(self, *args):
-        if len(args) != len(self.signature):
-            raise TypeError("get must have {} arguments".format(len(self.signature)))
-        args = tuple(self._convert_args(*args))
-        v = self.do_read(*args) if hasattr(self, "do_read") else None
-        with self._lock:
-            if v is not None:
-                self._set_value(v, *args)
-            return self._resolve_values(*args)
-
-    def set(self, value, *args):
-        if len(args) != len(self.signature):
-            raise TypeError("set must have {} arguments".format(len(self.signature)))
-        args = self._convert_args(*args)
-        self._set_value(value, *args)
-
-    def poll(self):
-        if not self.signature:
-            return {(): self.get()}
-        """Otherwise we cannot know hot to call get() we must use last computed value"""
-        with self._lock:
-            return self._values_dict(flat=True)
-
-    def _sync_cgi(self, request):
-        _name, args = self._get_request_data(request.path)
-        return str(self.get(*self._convert_args(*args)))
-
-    def get_cgi(self, path):
-        if not path.startswith("/"):
-            return None
-        name, args = self._get_request_data(path)
-        if name != self.name:
-            return None
-        if len(args) != len(self.signature):
-            return None
-        try:
-            args = tuple(self._convert_args(*args))
-        except (ValueError, KeyError):
-            return None
-        return CGI(self._sync_cgi)
-
-
-class ReporterFactory(SensorFactory):
-    block_constructor = Reporter

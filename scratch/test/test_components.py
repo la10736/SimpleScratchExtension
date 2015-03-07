@@ -44,6 +44,9 @@ class TestSensorFactory(unittest.TestCase):
         self.assertIsNone(sf.ed)
         self.assertEqual(('test', 'test test', 1), (sf.name, sf.description, sf.default))
 
+    def test_is_a_ReporterFactory_instance(self):
+        sf = SF(Mock(), 'test')
+        self.assertIsInstance(sf, RRF)
 
     def test_definition(self):
         """Give sensor definition as list to send as JSON object """
@@ -1254,15 +1257,15 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual('Are you done?', b.description)
         self.assertEqual('b', b.type)
 
-    def get_block(self, *args, **kwargs):
-        bf = BF(ed=Mock(), name="ok", description="Are you done?")
+    def get_block(self, description="Are you done?", *args, **kwargs):
+        bf = BF(ed=Mock(), name="ok", description=description, *args, **kwargs)
         return B(Mock(), bf)
 
-    def test_is_Sensor_subclass(self):
+    def test_is_Reporter_subclass(self):
         b = self.get_block()
-        self.assertIsInstance(b, B)
+        self.assertIsInstance(b, RR)
 
-    def test_get_set_clear(self):
+    def test_get_set_clear_simple(self):
         b = self.get_block()
         self.assertEqual("false", b.get())
         b.set(True)
@@ -1282,6 +1285,81 @@ class TestBooleanBlock(unittest.TestCase):
         b.clear()
         self.assertEqual("false", b.get())
 
+    def test_get_set_clear_one_arg(self):
+        b = self.get_block(description="%m.ages", ages=[12, 13, 14])
+        self.assertEqual("false", b.get(12))
+        self.assertEqual("false", b.get(13))
+        self.assertEqual("false", b.get(14))
+        b.set(True, 12)
+        self.assertEqual("true", b.get(12))
+        self.assertEqual("false", b.get(13))
+        self.assertEqual("false", b.get(14))
+        b.set(True, 13)
+        b.set(True, 14)
+        self.assertEqual("true", b.get(12))
+        self.assertEqual("true", b.get(13))
+        self.assertEqual("true", b.get(14))
+        b.set(False, 13)
+        self.assertEqual("true", b.get(12))
+        self.assertEqual("false", b.get(13))
+        self.assertEqual("true", b.get(14))
+        b.set("a", 13)
+        self.assertEqual("true", b.get(13))
+        b.set("", 13)
+        self.assertEqual("false", b.get(13))
+
+        b.set(True, 13)
+        b.clear()
+        self.assertEqual("false", b.get(12))
+        self.assertEqual("false", b.get(13))
+        self.assertEqual("false", b.get(14))
+
+    def test_get_set_clear_two_args(self):
+        b = self.get_block(description="%m.a %m.b", a=[1, 2], b=[3, 4])
+        self.assertEqual("false", b.get(1, 3))
+        self.assertEqual("false", b.get(1, 4))
+        self.assertEqual("false", b.get(2, 3))
+        self.assertEqual("false", b.get(2, 4))
+        b.set(True, 1, 3)
+        self.assertEqual("true", b.get(1, 3))
+        self.assertEqual("false", b.get(1, 4))
+        self.assertEqual("false", b.get(2, 3))
+        self.assertEqual("false", b.get(2, 4))
+        b.set(True, 2, 4)
+        self.assertEqual("true", b.get(1, 3))
+        self.assertEqual("false", b.get(1, 4))
+        self.assertEqual("false", b.get(2, 3))
+        self.assertEqual("true", b.get(2, 4))
+        b.clear()
+        self.assertEqual("false", b.get(1, 3))
+        self.assertEqual("false", b.get(1, 4))
+        self.assertEqual("false", b.get(2, 3))
+        self.assertEqual("false", b.get(2, 4))
+
+
+    def test_clear_default_True(self):
+        b = self.get_block(default=True, description="%m.ages", ages=[12, 13, 14])
+        self.assertEqual("true", b.get(12))
+        self.assertEqual("true", b.get(13))
+        self.assertEqual("true", b.get(14))
+        b.clear()
+        self.assertEqual("false", b.get(12))
+        self.assertEqual("false", b.get(13))
+        self.assertEqual("false", b.get(14))
+
+
+    @patch("threading.RLock", autospec=True)
+    def test_clear_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        b = self.get_block()
+        b.clear()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        b = self.get_block(description="%m.ages", ages=[12, 13, 14])
+        b.clear()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
 
     def test_create(self):
         mock_e = Mock()
@@ -1323,9 +1401,9 @@ class TestBooleanFactory(unittest.TestCase):
         self.assertEqual('b', bf.type)
         self.assertDictEqual({}, bf.menu_dict)
 
-    def test_is_a_SensorFactory_instance(self):
+    def test_is_a_ReporterFactory_instance(self):
         bf = BF(Mock(), 'test')
-        self.assertIsInstance(bf, SF)
+        self.assertIsInstance(bf, RRF)
 
     def test_create(self):
         """Create requester object"""
@@ -1888,11 +1966,6 @@ class TestReporterFactory(unittest.TestCase):
         self.assertEqual('r', rrf.type)
         self.assertDictEqual({}, rrf.menu_dict)
 
-    def test_is_a_SensorFactory_instance(self):
-        rrf = RRF(Mock(), 'test')
-        self.assertIsInstance(rrf, SF)
-
-
     def apply_signature(self, sig, values):
         return [f(v) for f, v in zip(sig, values)]
 
@@ -1942,12 +2015,11 @@ class TestReporterFactory(unittest.TestCase):
     def test_menus(self):
         med = Mock()
         rrf = RRF(med, 'test', description="%m.hands", hands=["left", "right"])
-        self.assertDictEqual({"hands":["left", "right"]}, rrf.menus)
+        self.assertDictEqual({"hands": ["left", "right"]}, rrf.menus)
 
         """Pay attentiontion to mappers"""
-        rrf = RRF(med, 'test', description="%m.hands", hands={"Left":"left", "Right":"right"})
-        self.assertDictEqual({"hands":["Left", "Right"]}, rrf.menus)
-
+        rrf = RRF(med, 'test', description="%m.hands", hands={"Left": "left", "Right": "right"})
+        self.assertDictEqual({"hands": ["Left", "Right"]}, rrf.menus)
 
 
 if __name__ == '__main__':
