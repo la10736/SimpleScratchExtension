@@ -910,9 +910,9 @@ class TestRequesterFactory(unittest.TestCase):
         self.assertEqual('R', rf.type)
         self.assertDictEqual({}, rf.menu_dict)
 
-    def test_is_a_SensorFactory_instance(self):
+    def test_is_a_ReporterFactory_instance(self):
         rf = RF(Mock(), 'test')
-        self.assertIsInstance(rf, SF)
+        self.assertIsInstance(rf, RRF)
 
     def test_create(self):
         """Create requester object"""
@@ -929,7 +929,7 @@ class TestRequester(unittest.TestCase):
     """Requester components perform asynchronous command. User application should override
     do_read() or use a runtime method set() to define the value. If do_read is present it will
     run in a new thread; when done value is updated and notified to scratch client application.
-    For general behaviour look Sensor
+    For general behaviour look Reporter
     """
 
     def test_base(self):
@@ -949,17 +949,17 @@ class TestRequester(unittest.TestCase):
         self.assertEqual('Are you done?', r.description)
         self.assertEqual('R', r.type)
 
-    def test_is_Sensor_subclass(self):
+    def test_is_Reporter_subclass(self):
         mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the command info
+        mock_rf = MagicMock()  # Mock the request info
         r = R(mock_e, mock_rf)
-        self.assertIsInstance(r, S)
+        self.assertIsInstance(r, RR)
 
-    def get_requester(self, name="requester", default=0, do_read=None):
+    def get_requester(self, name="requester", default=0, description=None, do_read=None):
         mock_e = Mock()
-        return R.create(mock_e, name=name, default=default, do_read=do_read)
+        return R.create(mock_e, name=name, default=default, description=description, do_read=do_read)
 
-    def test_execute_busy_read(self):
+    def test_execute_busy_read_no_args(self):
         """Remove the busy argument even if there is an exception
         """
         r = self.get_requester()
@@ -986,6 +986,51 @@ class TestRequester(unittest.TestCase):
         self.assertRaises(Exception, r.execute_busy_read, busy)
         self.assertEquals([(busy, v, None), (busy, "invalid", ex)], r.results)
         self.assertEqual(v, r.value)
+
+    def test_execute_busy_read_one_arg(self):
+        """Remove the busy argument even if there is an exception
+        """
+        r = self.get_requester(description="%n")
+        busy = 12345
+        self.assertFalse(r.results)
+
+        v = 12
+
+        def do_read(x):
+            return v * x
+
+        r.do_read = do_read
+        r.execute_busy_read(busy, 2)
+        self.assertEquals([(busy, v * 2, None)], r.results)
+        self.assertDictEqual({2: 24}, r.value)
+
+        r._busy.add(busy)
+        ex = Exception("my error")
+
+        def do_read(x):
+            raise ex
+
+        r.do_read = do_read
+        self.assertRaises(Exception, r.execute_busy_read, busy, 3)
+        self.assertEquals([(busy, 2 * v, None), (busy, "invalid", ex)], r.results)
+        self.assertDictEqual({2: 24}, r.value)
+
+    def test_execute_busy_read_two_args(self):
+        """Check two args behaviour
+        """
+        r = self.get_requester(description="%n %n")
+        busy = 12345
+        self.assertFalse(r.results)
+
+        v = 12
+
+        def do_read(x, y):
+            return v * (x + y)
+
+        r.do_read = do_read
+        r.execute_busy_read(busy, 2, 1)
+        self.assertEquals([(busy, v * 3, None)], r.results)
+        self.assertDictEqual({2: {1: 36}}, r.value)
 
     @patch("threading.RLock")
     def test_results_synchronize(self, m_lock):
@@ -1021,10 +1066,10 @@ class TestRequester(unittest.TestCase):
             self.assertEqual(m_lock.mock_calls[0], call.__enter__())
             self.assertEqual(m_lock.mock_calls[-1], call.__exit__(None, None, None))
 
-    def test_get_async_start_thread_to_execute_execute_busy_read(self):
+    def test_get_async_start_thread_to_execute_execute_busy_read_no_args(self):
         """Add busy, create thread with execute_busy_read target, set daemon to True and start thread.
 
-        Only if extension implement do_read()
+        Just if component implement do_read()
         """
         r = self.get_requester()
         busy = 12345
@@ -1046,13 +1091,31 @@ class TestRequester(unittest.TestCase):
         """Sanity chack without mocks"""
         r.get_async(busy)
 
-    def test_get_async_no_do_read_results_list(self):
+    def test_get_async_start_thread_to_execute_execute_busy_read_two_args(self):
+        """Check just args when build thread
+        """
+        r = self.get_requester(description="%n %n")
+        busy = 12345
+        r.do_read = Mock()
+        with patch("threading.Thread", autospec=True) as mock_thread_class:
+            mock_thread = mock_thread_class.return_value
+            r.get_async(busy, 1, 2)
+            mock_thread_class.assert_called_with(name=ANY, target=r.execute_busy_read, args=(busy, 1, 2))
+        """Sanity chack without mocks"""
+        r.get_async(busy, 2, 3)
+
+        """Without do_read"""
+        del r.do_read
+        """Just sanity chack without mocks"""
+        r.get_async(busy, 4, 5)
+
+    def test_get_async_no_do_read_results_list_no_args(self):
         r = self.get_requester()
         self.assertFalse(r.results)
         busy = 12345
         r.get_async(busy)
         self.assertFalse(r.results)
-        "untiol set()"
+        """set()"""
         r.set(223)
         self.assertEqual(r.results, [(busy, 223, None)])
         """two different busy"""
@@ -1083,6 +1146,73 @@ class TestRequester(unittest.TestCase):
         r.set(533)
         self.assertFalse(r.results)
 
+    def test_get_async_no_do_read_results_list_one_arg(self):
+        r = self.get_requester(description="%n")
+        self.assertFalse(r.results)
+        busy = 12345
+        r.get_async(busy, 1)
+        self.assertFalse(r.results)
+        """set() on right arg"""
+        r.set(223, 1)
+        self.assertEqual(r.results, [(busy, 223, None)])
+        """set() on other arg value"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy, 1)
+        r.set(223, 2)
+        self.assertFalse(r.results)
+        """---and now the right value"""
+        r.set(223, 1)
+        self.assertEqual(r.results, [(busy, 223, None)])
+
+        """two different busy on same args"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy, 1)
+        r.get_async(busy + 1, 1)
+        r.set(233, 1)
+        self.assertEqual(r.results, [(busy, 233, None),
+                                     (busy + 1, 233, None)])
+
+        """two different busy on two arg"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy, 1)
+        r.get_async(busy + 1, 2)
+        r.set(233, 1)
+        self.assertEqual(r.results, [(busy, 233, None)])
+        r.set(234, 2)
+        self.assertEqual(r.results, [(busy, 233, None),
+                                     (busy + 1, 234, None)])
+
+        """same busy same arg"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy, 1)
+        r.get_async(busy, 1)
+        r.set(333, 1)
+        self.assertEqual(r.results, [(busy, 333, None)])
+
+        """same busy not same arg"""
+        r._flush_results()
+        self.assertFalse(r.results)
+        r.get_async(busy, 1)
+        r.get_async(busy, 2)
+        r.set(333, 1)
+        self.assertEqual(r.results, [(busy, 333, None)])
+        r.set(334, 2)
+        self.assertEqual(r.results, [(busy, 333, None), (busy, 334, None)])
+
+        """Empty -> empty"""
+        r._flush_results()
+        r.set(433, 1)
+        self.assertFalse(r.results)
+
+        """Reset clean state"""
+        r.get_async(busy, 1)
+        r.reset()
+        r.set(533, 1)
+        self.assertFalse(r.results)
 
     @patch("threading.RLock")
     def test_busy_access_synchronize(self, m_lock):
@@ -1133,10 +1263,7 @@ class TestRequester(unittest.TestCase):
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
 
-    def test_get_cgi(self):
-        """
-        TODO: Must be update for multiple arguments reporter
-        """
+    def test_get_cgi_no_arg(self):
         r = self.get_requester(name="My Name")
         self.assertIsNone(r.get_cgi("not your cgi"))
         self.assertIsNone(r.get_cgi("My%20Name"))
@@ -1144,11 +1271,11 @@ class TestRequester(unittest.TestCase):
         """execute in line get() method"""
         cgi = r.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
-        with patch.object(r, "get_async", autospec=True) as mock_update, \
+        with patch.object(r, "get_async", autospec=True) as mock_get_async, \
                 patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
             mock_blockable_get.return_value = 1232
             self.assertEqual("1232", cgi(Mock(path="My%20Name")))
-            self.assertFalse(mock_update.called)
+            self.assertFalse(mock_get_async.called)
 
         """One argument that is an integer: call get_async"""
         self.assertIsNone(r.get_cgi("/My%20Name/mybusy"))
@@ -1158,6 +1285,30 @@ class TestRequester(unittest.TestCase):
         with patch.object(r, "get_async", autospec=True) as mock_update:
             self.assertEqual("", cgi(Mock(path="My%20Name/3452")))
             mock_update.assert_called_with(3452)
+
+    def test_get_cgi_one_int_arg(self):
+        r = self.get_requester(name="My Name", description="%n")
+        """No arg -> no answer"""
+        self.assertIsNone(r.get_cgi("/My%20Name"))
+        """Invalid arg -> None"""
+        self.assertIsNone(r.get_cgi("/My%20Name/myarg"))
+        """execute in line get() method"""
+        cgi = r.get_cgi("/My%20Name/12")
+        self.assertIsNotNone(cgi)
+        with patch.object(r, "get_async", autospec=True) as mock_get_async, \
+                patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
+            mock_blockable_get.return_value = 1232
+            self.assertEqual("1232", cgi(Mock(path="My%20Name/12")))
+            self.assertFalse(mock_get_async.called)
+
+        """match int,int: call get_async"""
+        self.assertIsNone(r.get_cgi("/My%20Name/mybusy/13"))
+        cgi = r.get_cgi("/My%20Name/12/13")
+        self.assertIsNotNone(cgi)
+        self.assertEqual({}, cgi.headers)
+        with patch.object(r, "get_async", autospec=True) as mock_get_async:
+            self.assertEqual("", cgi(Mock(path="My%20Name/12/13")))
+            mock_get_async.assert_called_with(12,13)
 
     def test_create(self):
         mock_e = Mock()
@@ -1181,7 +1332,7 @@ class TestRequester(unittest.TestCase):
         r = self.get_requester()
         self.assertDictEqual({}, r.poll())
 
-    def test_busy_get_when_do_read_exist(self):
+    def test_busy_get_when_do_read_exist_no_arg(self):
         """Simply work like a proxy on do_read and not
         enter in condition context"""
         v = 51
@@ -1197,21 +1348,71 @@ class TestRequester(unittest.TestCase):
             r.busy_get()
             self.assertFalse(mock_condition.__enter__.called)
 
-    def test_busy_get_without_do_read(self):
+    def test_busy_get_without_do_read_no_arg(self):
         """Execute busy_get() in a thread and check return value.
         Main cycle use set() to wake up thread"""
         r = self.get_requester()
 
+        ex=[]
+
         def thread_body():
-            self.assertEqual(123, r.busy_get())
+            try:
+                self.assertEqual(123, r.busy_get())
+            except Exception as e:
+                ex.append(e)
 
         t = threading.Thread(target=thread_body)
-        r._ready = True
+        r._ready = set()
         t.start()
         with r._condition:
-            r._condition.wait_for(lambda: not r._ready, 0.1)
+            r._condition.wait_for(lambda: () in r._ready, 0.1)
         r.set(123)  # Wakeup thread and do check
         t.join(0.2)
+        self.assertFalse(t.isAlive())
+        if ex:
+            raise ex[0]
+
+    def test_busy_get_without_do_read_some_args(self):
+        """Execute busy_get() in a thread and check return value.
+        Main cycle use set() to wake up thread"""
+        r = self.get_requester(description="%n %n %s")
+
+        ex=[]
+
+        def thread_body():
+            try:
+                self.assertEqual(123, r.busy_get(12, 77, "minnie"))
+            except Exception as e:
+                ex.append(e)
+
+        t = threading.Thread(target=thread_body)
+        r._ready = set()
+        args = (12, 77, "minnie")
+        t.start()
+        with r._condition:
+            r._condition.wait_for(lambda: args in  r._ready, 0.1)
+        r.set(123, 12, 77, "minnie")  # Wakeup thread and do check
+        t.join(0.2)
+        self.assertFalse(t.isAlive())
+        if ex:
+            raise ex[0]
+
+        t = threading.Thread(target=thread_body)
+        r._ready = set()
+        t.start()
+        with r._condition:
+            r._condition.wait_for(lambda: args in r._ready, 0.1)
+        r.set(123, 13, 77, "minnie")  # Don't wake up
+        t.join(0.1)
+        self.assertTrue(t.isAlive())
+        r.set(123, 12, 77, "goofy")  # Don't wake up
+        t.join(0.1)
+        self.assertTrue(t.isAlive())
+        r.set(123,12, 77, "minnie")  # Wakeup thread and do check
+        t.join(0.2)
+        self.assertFalse(t.isAlive())
+        if ex:
+            raise ex[0]
 
     def test_reset_unlock_waiter_request(self):
         """Execute busy_get().
@@ -1226,12 +1427,14 @@ class TestRequester(unittest.TestCase):
             r.busy_get()
 
         t = threading.Thread(target=thread_body)
-        r._ready = True
+        r._ready = set()
         t.start()
         with r._condition:
-            r._condition.wait_for(lambda: not r._ready, 0.1)
+            r._condition.wait_for(lambda: () in r._ready, 0.1)
         r.reset()  # Wakeup thread
         t.join(0.2)
+        self.assertFalse(t.isAlive())
+        self.assertSetEqual(set(), r._ready)
         self.assertFalse(r.results)
 
 
@@ -1564,7 +1767,7 @@ class Test_utils(unittest.TestCase):
 
 
 class TestReporter(unittest.TestCase):
-    """Reporter are sensor block that support arguments"""
+    """Reporter are sensor blocks that support arguments"""
 
     def test_base(self):
         mock_e = Mock()  # Mock the extension
@@ -1632,7 +1835,7 @@ class TestReporter(unittest.TestCase):
         self.assertEqual("default age", r.get("sentinel", 5, "female"))  # age default
         self.assertEqual("my default", r.get("sent", 12, "male"))  # name default
 
-        self.assertRaises(KeyError, r.get, "sentinel", 32, "MALE")
+        self.assertRaises(TypeError, r.get, "sentinel", 32, "MALE")
 
     def test_set_should_respect_the_signature(self):
         mock_e = Mock()  # Mock the extension
@@ -1674,7 +1877,7 @@ class TestReporter(unittest.TestCase):
         r.set("MaLe", "sentinel", 32, "male")
         self.assertEqual("MaLe", r.get("sentinel", 32, "male"))
 
-        self.assertRaises(KeyError, r.set, "GOLD", "sentinel", 32, "MALE")
+        self.assertRaises(TypeError, r.set, "GOLD", "sentinel", 32, "MALE")
 
     def test_reset_recover_default_value(self):
         mock_e = Mock()  # Mock extension

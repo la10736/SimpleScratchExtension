@@ -251,7 +251,7 @@ class Block():
     def _check_command_argument(self, *args):
         """ Base implementation: no cheks
 
-        :return: None if wrong elese the arguments tuple
+        :return: None if wrong else the arguments tuple
         """
         return args
 
@@ -351,15 +351,17 @@ class Reporter(Block):
                 d[args[-1]] = value
 
     def _convert_args(self, *args):
+        if not len(args)+len(self.signature):
+            return ()
         try:
-            return map(lambda x, y: x(y), self.signature, args)
+            return tuple(map(lambda x, y: x(y), self.signature, args))
         except (ValueError, KeyError):
             raise TypeError("Arguments don't fit signature {}".format(self.signature))
 
     def get(self, *args):
         if len(args) != len(self.signature):
             raise TypeError("get must have {} arguments".format(len(self.signature)))
-        args = tuple(self._convert_args(*args))
+        args = self._convert_args(*args)
         v = self.do_read(*args) if hasattr(self, "do_read") else None
         with self._lock:
             if v is not None:
@@ -398,7 +400,7 @@ class Reporter(Block):
             return None
         try:
             args = tuple(self._convert_args(*args))
-        except (ValueError, KeyError):
+        except TypeError:
             return None
         return CGI(self._sync_cgi)
 
@@ -644,7 +646,7 @@ class WaiterCommandFactory(CommandFactory):
     block_constructor = WaiterCommand
 
 
-class Requester(Sensor):
+class Requester(Reporter):
     @staticmethod
     def create(extension, name, default=None, description=None, **kwargs):
         do_read = extract_arg("do_read", kwargs)
@@ -654,33 +656,38 @@ class Requester(Sensor):
     def __init__(self, extension, info, value=None):
         super().__init__(extension, info, value)
         self._condition = threading.Condition(self._lock)
-        self._ready = False
+        self._ready = set()
         self._results = []
-        self._pending_async_results = set()
+        self._pending_async_results = None
+        self._init_pending_async_results()
 
-    def _set_value(self, value):
+    def _init_pending_async_results(self):
+        self._pending_async_results = collections.defaultdict(set)
+
+    def _set_value(self, value, *args):
+        args = tuple(args)
         with self._condition:
-            super()._set_value(value)
+            print("PRE "+str(self._ready))
+            super()._set_value(value, *args)
             if not hasattr(self, "do_read"):
-                while self._pending_async_results:
-                    busy = self._pending_async_results.pop()
+                s = {}
+                if args in self._pending_async_results:
+                    s = self._pending_async_results[args]
+                    del self._pending_async_results[args]
+                while s:
+                    busy = s.pop()
                     self._new_result(busy, value, None)
-                self._flush_pending_async_results()
-            self._ready = True
+            self._ready.discard(args)
+            print(self._ready)
             self._condition.notify_all()
 
     def _new_result(self, busy, v="invalid", exception=None):
         with self._lock:
             self._results.append((busy, v, exception))
-            self._pending_async_results.discard(busy)
 
     def _flush_results(self):
         with self._lock:
             self._results = []
-
-    def _flush_pending_async_results(self):
-        with self._lock:
-            self._pending_async_results = set()
 
     @property
     def results(self):
@@ -704,60 +711,68 @@ class Requester(Sensor):
         finally:
             self._new_result(busy, v, ex)
 
-    def get_async(self, busy):
+    def get_async(self, busy, *args):
+        args = tuple(args)
         logging.info("requester {}".format(self.name))
-        self._pending_async_results.add(busy)
+        self._pending_async_results[args].add(busy)
         if hasattr(self, "do_read"):
             t = threading.Thread(name="Requester {} [{}] execution".format(self.name, busy),
                                  target=self.execute_busy_read,
-                                 args=(busy,))
+                                 args=(busy,) + args)
             t.setDaemon(True)
             self._busy.add(busy)
             t.start()
 
-    def busy_get(self):
-        logging.info("busy_get {}".format(self.name))
+    def busy_get(self, *args):
+        logging.info("busy_get {} args={}".format(self.name,args))
         if hasattr(self, "do_read"):
-            return self.do_read()
+            return self.do_read(*args)
         with self._condition:
-            self._ready = False
-            self._condition.wait_for(lambda: self._ready)
-            return self._value
+            self._ready.add(args)
+            self._condition.wait_for(lambda: args not in self._ready)
+            return self._resolve_values(*args)
 
     def reset(self):
         with self._lock:
-            self._ready = True
+            self._ready = set()
             self._condition.notify_all()
             self._busy_clean()
             self._flush_results()
-            self._flush_pending_async_results()
+            self._init_pending_async_results()
             self.do_reset()
 
     def _check_command_argument(self, *args):
-        """ Base implementation for requester without arguments if no args return () [execute inline],
-        if an argument check if it is integer and use it as busy.
+        """ Check if it is in the form int + signature or just signature..
 
-        :return: None if wrong else the arguments tuple
+        :return: busy, args . Where busy is None if not present
         """
-        if len(args) > 1:
-            return None
-        if not len(args):
-            return ()
-        try:
-            return (int(args[0]),)
-        except ValueError:
-            return None
-        return None
+        l = len(args)
+        ll = len(self.signature)
+        busy = None
+        conv_args = None
+        if l == ll + 1:
+            l -= 1
+            try:
+                busy = int(args[0])
+            except ValueError:
+                return  None,None
+            args = args[1:]
+        if l == ll:
+            try:
+                conv_args = self._convert_args(*args)
+            except TypeError:
+                return  None,None
+        return busy, conv_args
 
     def _sync_cgi(self, request):
         _name, args = self._get_request_data(request.path)
-        args = self._check_command_argument(*args)
+        _busy, args = self._check_command_argument(*args)
         return str(self.busy_get(*args))
 
     def _async_cgi(self, request):
         _name, args = self._get_request_data(request.path)
-        args = self._check_command_argument(*args)
-        self.get_async(*args)
+        busy, args = self._check_command_argument(*args)
+        self.get_async(busy, *args)
         return ""
 
     def get_cgi(self, path):
@@ -766,10 +781,10 @@ class Requester(Sensor):
         name, args = self._get_request_data(path)
         if name != self.name:
             return None
-        args = self._check_command_argument(*args)
+        busy, args = self._check_command_argument(*args)
         if args is None:
             return None
-        if not len(args):
+        if busy is None:
             return CGI(self._sync_cgi)
         return CGI(self._async_cgi)
 
@@ -778,6 +793,6 @@ class Requester(Sensor):
         # return {self.name: self.value}
 
 
-class RequesterFactory(SensorFactory):
+class RequesterFactory(ReporterFactory):
     type = "R"  # blocking reporter
     block_constructor = Requester

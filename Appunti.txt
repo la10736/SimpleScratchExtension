@@ -55,8 +55,9 @@ Aprire i ticket su scratch
 
 TODO LIST:
 - Rimuovere Sensor o farlo sottoclasse dei Reporter
--- Rimasti solo i report figli di Sensor
-- Commands con argomenti
-- Riposta home servizio con jason della descrizione
+-- Spostare i test dal Sensor ai reporters
+-- I Sensor non devono permettere di creare componenti con più argomenti
+- Commands con argomenti (gia' fatti?)
+- Riposta home servizio con json della descrizione
 - Minisito (Flask?) con link dei servizi registrati: i servizi si registrano via web
 - Fixare il microsito Flask
