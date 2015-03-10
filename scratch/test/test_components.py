@@ -10,10 +10,100 @@ import unittest
 from scratch.portability.mock import patch, Mock
 from scratch.components import Sensor as S, SensorFactory as SF, \
     Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
-    WaiterCommand as W, WaiterCommandFactory as WF, Requester as R, \
-    RequesterFactory as RF, BooleanBlock as B, BooleanFactory as BF, \
-    Reporter as RR, ReporterFactory as RRF
+    WaiterCommand as W, WaiterCommandFactory as WF, Requester as RQ, \
+    RequesterFactory as RQF, BooleanBlock as B, BooleanFactory as BF, \
+    Reporter as R, ReporterFactory as RF
 from scratch.components import parse_description, to_bool
+
+
+class TestReporterFactory(unittest.TestCase):
+    """We are testing reporter descriptors (sensor with arguments). They define name and description and provide
+    a signature: a tuple of functions that take the arguments as string and return the arguments to use
+    in do_read() and set() methods."""
+
+    def test_base(self):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, RF)
+        self.assertRaises(TypeError, RF, med)
+        rrf = RF(med, 'test')
+        self.assertIs(med, rrf.ed)
+        self.assertEqual('test', rrf.name)
+        self.assertEqual('test', rrf.description)
+        self.assertEqual("", rrf.default)
+        self.assertEqual('r', rrf.type)
+        self.assertDictEqual({}, rrf.menu_dict)
+
+    def apply_signature(self, sig, values):
+        return [f(v) for f, v in zip(sig, values)]
+
+    def test_signature(self):
+        """Return the signature of do_read() and set() method. To do the work use parse_description"""
+        med = Mock()
+        rrf = RF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=["left", "right"])
+        vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
+        self.assertEqual(vals, [3, "left", "joe"])
+
+        rrf = RF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s",
+                 hands={"left": 0, "right": 1})
+        vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
+        self.assertEqual(vals, [3, 0, "joe"])
+        vals = self.apply_signature(rrf.signature, ("5.2", "right", "Ely"))
+        self.assertEqual(vals, [5.2, 1, "Ely"])
+
+        """Change a dict must not change behaviour"""
+        m = {"left": 0, "right": 1}
+        rrf = RF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=m)
+        vals = self.apply_signature(rrf.signature, ("1", "right", "Vincent"))
+        self.assertEqual(vals, [1, 1, "Vincent"])
+        m["right"] = 32
+        vals = self.apply_signature(rrf.signature, ("1", "right", "Vincent"))
+        self.assertEqual(vals, [1, 1, "Vincent"])
+
+    def test_create(self):
+        """Create the reporter object"""
+        rrf = RF(Mock(), 'test')
+        mock_extension = Mock()
+        self.assertRaises(TypeError, rrf.create)
+        r = rrf.create(mock_extension, 1345)
+        self.assertIsInstance(r, R)
+        self.assertIs(r.extension, mock_extension)
+        self.assertIs(r.info, rrf)
+        self.assertEqual(r.get(), 1345)
+
+        rrf = RF(Mock(), 'test', description="string %s")
+        r = rrf.create(mock_extension)
+        self.assertIsInstance(r, R)
+        self.assertIs(r.extension, mock_extension)
+        self.assertIs(r.info, rrf)
+        self.assertEqual(r.get("www"), "")
+        r.do_read = lambda v: v.upper()
+        self.assertEqual(r.get("www"), "WWW")
+
+    def test_create_do_read(self):
+        """Create a sensor object and set do_read() method"""
+        rf = RF(Mock(), 'test')
+        mock_extension = Mock()
+
+        def do_read():
+            return "goofy"
+
+        r = rf.create(mock_extension, do_read=do_read)
+        self.assertEqual(r.get(), "goofy")
+
+    def test_definition(self):
+        """Give reporter definition as list to send as JSON object """
+        rf = RF(ed=Mock(), name="goofy", default=1234, description="donald duck")
+        self.assertListEqual(["r", "donald duck", "goofy"], rf.definition)
+
+    def test_menus(self):
+        med = Mock()
+        rrf = RF(med, 'test', description="%m.hands", hands=["left", "right"])
+        self.assertDictEqual({"hands": ["left", "right"]}, rrf.menus)
+
+        """Pay attentiontion to mappers"""
+        rrf = RF(med, 'test', description="%m.hands", hands={"Left": "left", "Right": "right"})
+        self.assertDictEqual({"hands": ["Left", "Right"]}, rrf.menus)
 
 
 class TestSensorFactory(unittest.TestCase):
@@ -46,12 +136,7 @@ class TestSensorFactory(unittest.TestCase):
 
     def test_is_a_ReporterFactory_instance(self):
         sf = SF(Mock(), 'test')
-        self.assertIsInstance(sf, RRF)
-
-    def test_definition(self):
-        """Give sensor definition as list to send as JSON object """
-        sf = SF(ed=Mock(), name="goofy", default=1234, description="donald duck")
-        self.assertListEqual(["r", "donald duck", "goofy"], sf.definition)
+        self.assertIsInstance(sf, RF)
 
     def test_create(self):
         """Create the sensor object"""
@@ -64,16 +149,417 @@ class TestSensorFactory(unittest.TestCase):
         self.assertIs(s.info, sf)
         self.assertEqual(s.get(), 1345)
 
-    def test_create_do_read(self):
-        """Create a sensor object and set do_read() method"""
-        sf = SF(Mock(), 'test')
-        mock_extension = Mock()
+
+class TestReporter(unittest.TestCase):
+    """Reporter are sensor blocks that support arguments"""
+
+    def test_base(self):
+        mock_e = Mock()  # Mock the extension
+        mock_ed = Mock()  # Mock the extension definition
+
+        """Costructor take extension as first argument and ReporterFactory as second"""
+        self.assertRaises(TypeError, R)
+        self.assertRaises(TypeError, R, mock_e)
+
+        rrf = RF(ed=mock_ed, name="get_message", description="Get message from %s")
+        rr = R(mock_e, rrf)
+        self.assertIs(rr.extension, mock_e)
+        self.assertIs(rr.info, rrf)
+        self.assertEqual({}, rr.value)
+        self.assertEqual('get_message', rr.name)
+        self.assertEqual('Get message from %s', rr.description)
+        self.assertEqual('r', rr.type)
+
+    def test_proxy(self):
+        """Check the proxy"""
+        mock_e = Mock()  # Mock the extension
+        mock_rf = MagicMock()  # Mock the reporter info
+        r = R(mock_e, mock_rf)
+        self.assertIs(r.type, mock_rf.type)
+        self.assertIs(r.name, mock_rf.name)
+        self.assertIs(r.description, mock_rf.description)
+        self.assertIs(r.definition, mock_rf.definition)
+        self.assertIs(r.signature, mock_rf.signature)
+
+    def test_get_should_respect_the_signature(self):
+        mock_e = Mock()  # Mock the extension
+        med = Mock()
+        rrf = RF(med, 'test', description="Base Signature: no args")
+        r = R(mock_e, rrf, value=13)
+        self.assertEqual(13, r.get())
+        self.assertRaises(TypeError, r.get, 1)
+        self.assertRaises(TypeError, r.get, "minnie")
+
+        """One string"""
+        rrf = RF(med, 'test', description="Get info about %s")
+        r = R(mock_e, rrf, value={None: "my default", "sentinel": "you got it"})
+        self.assertRaises(TypeError, r.get)
+        self.assertRaises(TypeError, r.get, "first", "second")
+        self.assertEqual("you got it", r.get("sentinel"))
+        self.assertEqual("my default", r.get("wrong"))
+        self.assertEqual("my default", r.get(12))
+        self.assertEqual("my default", r.get("32.4"))
+        self.assertEqual("my default", r.get(3.4))
+
+        """One string, one float, one menu"""
+        rrf = RF(med, 'test', description="Get info about %s, age %n, gender %m.gender", gender=["male", "female"])
+        r = R(mock_e, rrf, value={None: "my default", "sentinel": {None: "default age",
+                                                                   32: {"male": "MALE", "female": "FEMALE"},
+                                                                   12: {"male": "MalE"}}})
+
+        self.assertRaises(TypeError, r.get)
+        self.assertRaises(TypeError, r.get, "first")
+        self.assertRaises(TypeError, r.get, "first", 2)
+        self.assertRaises(TypeError, r.get, "first", 2, "male", "other")
+
+        self.assertEqual("MALE", r.get("sentinel", 32, "male"))
+        self.assertEqual("FEMALE", r.get("sentinel", 32, "female"))
+        self.assertEqual("MalE", r.get("sentinel", 12, "male"))
+        self.assertEqual("default age", r.get("sentinel", 12, "female"))  # last default
+        self.assertEqual("default age", r.get("sentinel", 5, "female"))  # age default
+        self.assertEqual("my default", r.get("sent", 12, "male"))  # name default
+
+        self.assertRaises(TypeError, r.get, "sentinel", 32, "MALE")
+
+    def test_set_should_respect_the_signature(self):
+        mock_e = Mock()  # Mock the extension
+        med = Mock()
+        rrf = RF(med, 'test', description="Base Signature: no args")
+        r = R(mock_e, rrf, value=13)
+        r.set(12)
+        self.assertRaises(TypeError, r.set, 10, 1)
+        self.assertRaises(TypeError, r.set, 11, "minnie")
+
+        """One string"""
+        rrf = RF(med, 'test', description="Get info about %s")
+        r = R(mock_e, rrf, value={None: "my default", "sentinel": "you got it"})
+        self.assertRaises(TypeError, r.set, "No info")
+        self.assertRaises(TypeError, r.set, "No info", "john", "other")
+        r.set("No info", "john")
+        self.assertEqual("you got it", r.get("sentinel"))
+        self.assertEqual("No info", r.get("john"))
+        self.assertEqual("my default", r.get("wrong"))
+        self.assertEqual("my default", r.get(12))
+        self.assertEqual("my default", r.get("32.4"))
+        self.assertEqual("my default", r.get(3.4))
+
+        """One string, one float, one menu"""
+        rrf = RF(med, 'test', description="Get info about %s, age %n, gender %m.gender", gender=["male", "female"])
+        r = R(mock_e, rrf, value={None: "my default", "sentinel": {None: "default age",
+                                                                   32: {"male": "MALE", "female": "FEMALE"},
+                                                                   12: {"male": "MalE"}}})
+
+        self.assertRaises(TypeError, r.set)
+        self.assertRaises(TypeError, r.set, "GOLD", "first")
+        self.assertRaises(TypeError, r.set, "GOLD", "first", 2)
+        self.assertRaises(TypeError, r.set, "GOLD", "first", 2, "male", "other")
+
+        r.set("GOLD", "john", 25, "male")
+        self.assertEqual("GOLD", r.get("john", 25, "male"))
+        self.assertEqual("MALE", r.get("sentinel", 32, "male"))
+        # Override
+        r.set("MaLe", "sentinel", 32, "male")
+        self.assertEqual("MaLe", r.get("sentinel", 32, "male"))
+
+        self.assertRaises(TypeError, r.set, "GOLD", "sentinel", 32, "MALE")
+
+    def test_reset_recover_default_value(self):
+        mock_e = Mock()  # Mock extension
+        rrf = RF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
+        r = R(mock_e, rrf)
+        orig_d = {k: {j: "" for j in ["c", "d"]} for k in ["a", "b"]}
+
+        d = copy.deepcopy(orig_d)
+        orig_results = {(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}
+        results = orig_results.copy()
+        self.assertDictEqual(d, r.value)
+        self.assertDictEqual(results, r.poll())
+        r.set(33, "a", "c")
+        d["a"]["c"] = results[("a", "c")] = 33
+        self.assertDictEqual(d, r.value)
+        self.assertDictEqual(results, r.poll())
+        r.reset()
+        self.assertDictEqual(orig_d, r.value)
+        self.assertDictEqual(orig_results, r.poll())
+
+        """No trivial default"""
+        rrf = RF(mock_e, 'test', default={None: 45, "a": {"d": 30}, "b": {None: 19}},
+                 description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
+        r = R(mock_e, rrf)
+        orig_d = {"a": {"c": 45, "d": 30}, "b": {"c": 19, "d": 19}}
+        d = copy.deepcopy(orig_d)
+        orig_results = {("a", "c"): 45,
+                        ("a", "d"): 30,
+                        ("b", "c"): 19,
+                        ("b", "d"): 19,
+        }
+        results = orig_results.copy()
+        self.assertDictEqual(d, r.value)
+        self.assertDictEqual(results, r.poll())
+        r.set(-3, "a", "c")
+        d["a"]["c"] = results[("a", "c")] = -3
+        self.assertDictEqual(d, r.value)
+        self.assertDictEqual(results, r.poll())
+        r.reset()
+        self.assertDictEqual(orig_d, r.value)
+        self.assertDictEqual(orig_results, r.poll())
+
+    def test_do_read(self):
+        mock_e = Mock()  # Mock the extension
+        rrf = RF(mock_e, 'test', description="Base")
+        r = R(mock_e, rrf)
+        r.set("ss")
+        self.assertEqual("ss", r.get())
+        r.do_read = lambda: "AA"
+        self.assertEqual("AA", r.get())
+
+        """Change Signature"""
+        rrf = RF(mock_e, 'test', description="menu %m.gender", gender=["male", "female"])
+        r = R(mock_e, rrf)
+        r.do_read = lambda g: g.upper()
+        self.assertEqual("MALE", r.get("male"))
+        self.assertDictEqual({"male": "MALE", "female": ""}, r.value)
+        """Raise exception wrong signature"""
+        r.do_read = lambda: "NO CALL"
+        self.assertRaises(TypeError, r.get, "male")
+        r.do_read = lambda a, b: "NO CALL"
+        self.assertRaises(TypeError, r.get, "male")
+        """Don't mask exception"""
+
+        def _raise(a):
+            raise Exception(a)
+
+        r.do_read = _raise
+        self.assertRaises(Exception, r.get, "male")
+
+        "Respect float"
+        rrf = RF(mock_e, 'test', description="number %n")
+        r = R(mock_e, rrf)
+        r.do_read = lambda a: a * 2
+        self.assertEqual(1.2, r.get(0.6))
+        self.assertEqual(1.2, r.get("0.6"))
+        self.assertEqual(2.0, r.get(1))
+
+    def test_get_and_set(self):
+        mock_e = Mock()  # Mock the extension
+        mock_rf = MagicMock()  # Mock the sensor info
+        r = R(mock_e, mock_rf, value=56)
+        self.assertEqual(56, r.get())
+        r.set(67)
+        self.assertEqual(67, r.get())
+        r.set("hi")
+        self.assertEqual("hi", r.get())
+
+    @patch("threading.RLock", autospec=True)
+    def test_get_and_set_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock extension
+        mock_rf = MagicMock()  # Mock reporter info
+        r = R(mock_e, mock_rf, value=56)
+        r.get()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        r.set("ss")
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+
+        """Change signature"""
+        mock_rf.signature = (float, str)
+        r = R(mock_e, mock_rf, value={})
+        r.get(1.0, "Robert")
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+        m_lock.reset_mock()
+        r.set("ss", 1.0, "Robert")
+
+    def test_value(self):
+        """1) return last computed value
+           1-a) if signature is empty return value
+           1-b) return a dictionary of resolved result
+           2) synchronize
+        """
+        mock_e = Mock()  # Mock extension
+        mock_rf = MagicMock()  # Mock reporter info
+        r = R(mock_e, mock_rf, value=56)
+        self.assertEqual(56, r.value)
+        r.set("ss")
+        self.assertEqual("ss", r.value)
+
+        """Simple case: one menue exstension"""
+        rrf = RF(mock_e, 'test', description="Numbers of %m.gender", gender=["male", "female"])
+        vals = {"male": 12, "female": 32}
+        r = R(mock_e, rrf, value=vals)
+        self.assertDictEqual(vals, r.value)
+        """Must be a copy"""
+        v = r.value
+        v["male"] = 1
+        self.assertEqual(vals["male"], 12)
+        self.assertDictEqual(vals, r.value)
+
+        rrf = RF(mock_e, 'test', description="Numbers of %m.gender from %m.state", gender=["male", "female"],
+                 state=["Italy", "USA", "Germany"])
+        r = R(mock_e, rrf, value=21)
+        d = {k: {j: 21 for j in ["Italy", "USA", "Germany"]} for k in ["male", "female"]}
+        self.assertDictEqual(d, r.value)
+
+        rrf = RF(mock_e, 'test', description="Numbers of %d.gender from %d.state", gender=["male", "female"],
+                 state=["Italy", "USA", "Germany"])
+        r = R(mock_e, rrf, value={"male": {None: 33}, "female": {"USA": 11, None: 44}, None: 1})
+        d = {"male": {j: 33 for j in ["Italy", "USA", "Germany"]}}
+        d["female"] = {j: 44 for j in ["Italy", "Germany"]}
+        d["female"]["USA"] = 11
+        self.assertDictEqual(d, r.value)
+        r.set(77, "male", "Italy")
+        d["male"]["Italy"] = 77
+        self.assertDictEqual(d, r.value)
+        r.set(99, "unknown", "French")
+
+        d["unknown"] = {j: 1 for j in ["Italy", "USA", "Germany"]}
+        d["unknown"]["French"] = 99
+
+        self.assertDictEqual(d, r.value)
+
+        rrf = RF(mock_e, 'test', description="string %s menu %m.gender", gender=["male", "female"])
+        r = R(mock_e, rrf, value=55)
+        self.assertDictEqual({}, r.value)
+        r.set(12, "test", "male")
+        self.assertDictEqual({"test": {"male": 12, "female": 55}}, r.value)
+
+        with patch("threading.RLock") as m_lock:
+            m_lock = m_lock.return_value
+            """We must rebuild s to mock lock"""
+            r = R(mock_e, rrf, value=75)
+            r.value
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+            m_lock.reset_mock()
+            r._set_value(32, "test", "female")
+            self.assertTrue(m_lock.__enter__.called)
+            self.assertTrue(m_lock.__exit__.called)
+
+    def test_reset(self):
+        mock_e = Mock()  # Mock the extension
+        mock_rf = MagicMock()  # Mock the sensor info
+        r = R(mock_e, mock_rf)
+        """just call s.reset()"""
+        r.reset()
+
+    @patch("threading.RLock")
+    def test_reset_synchronize(self, m_lock):
+        m_lock = m_lock.return_value
+        mock_e = Mock()  # Mock the extension
+        mock_rf = MagicMock()  # Mock the sensor info
+        r = R(mock_e, mock_rf)
+        """just call s.reset()"""
+        r.reset()
+        self.assertTrue(m_lock.__enter__.called)
+        self.assertTrue(m_lock.__exit__.called)
+
+    def test_get_cgi(self):
+        """Standard description with o arguments"""
+        mock_e = Mock()  # Mock extension
+        rrf = RF(mock_e, 'My Name', description="Base")
+        r = R(mock_e, rrf)
+        self.assertIsNone(r.get_cgi("not your cgi"))
+        self.assertIsNone(r.get_cgi("My%20Name"))
+        """Must start by /"""
+        """execute in line get() method"""
+        cgi = r.get_cgi("/My%20Name")
+        self.assertIsNotNone(cgi)
+        r.do_read = lambda: 54321
+        self.assertEqual("54321", cgi(Mock(path="My%20Name")))
+
+        """More args return None"""
+        self.assertIsNone(r.get_cgi("/My%20Name/1234"))
+
+        rrf = RF(mock_e, 'My Name', description="string %s number %n boolean %b menu %m.menu editable menu %d.ed_menu",
+                 menu=["a", "b"], ed_menu=["c", "d"])
+        r = R(mock_e, rrf)
+        self.assertIsNone(r.get_cgi("/My%20Name"))
+        self.assertIsNone(r.get_cgi("/My%20Name/test"))
+        self.assertIsNone(r.get_cgi("/My%20Name/test/1.2"))
+        self.assertIsNone(r.get_cgi("/My%20Name/test/1.2/true"))
+        self.assertIsNone(r.get_cgi("/My%20Name/test/1.2/true/a"))
+        cgi = r.get_cgi("/My%20Name/test/1.2/true/a/k")
+        self.assertIsNotNone(cgi)
+        r.do_read = lambda *args: ",".join(map(str, args))
+        self.assertEqual("test,1.2,True,a,k", cgi(Mock(path="My%20Name/test/1.2/true/a/k")))
+        self.assertIsNone(r.get_cgi("/My%20Name/test/aa/true/a/d"))
+        self.assertIsNone(r.get_cgi("/My%20Name/test/1/false/d/d"))
+
+    def test_create(self):
+        mock_e = Mock()
+        r = R.create(mock_e, "reporter")
+        self.assertIs(mock_e, r.extension)
+        self.assertEqual(r.name, "reporter")
 
         def do_read():
             return "goofy"
 
-        s = sf.create(mock_extension, do_read=do_read)
-        self.assertEqual(s.get(), "goofy")
+        r = R.create(mock_e, "reporter2", default="S", description="No Args", do_read=do_read)
+        self.assertIs(mock_e, r.extension)
+        self.assertEqual(r.name, "reporter2")
+        self.assertEqual(r.info.default, "S")
+        self.assertEqual(r.description, "No Args")
+        self.assertEqual(r.get(), "goofy")
+
+        """Wrong do_read() signature"""
+        self.assertRaises(TypeError, R.create, mock_e, "reporter2", default="S", description="string %s",
+                          do_read=do_read)
+
+        def do_read(v):
+            return v.upper()
+
+        r = R.create(mock_e, "reporter2", default="S", description="string %s", do_read=do_read)
+        self.assertEqual(r.get("goofy"), "GOOFY")
+
+    def test_poll_base(self):
+        """Standard description with o arguments"""
+        mock_e = Mock()  # Mock extension
+        rrf = RF(mock_e, 'test', description="Base")
+        r = R(mock_e, rrf)
+        self.assertDictEqual({(): ''}, r.poll())
+        r = R(mock_e, rrf, value=32)
+        self.assertDictEqual({(): 32}, r.poll())
+        r.set(88)
+        self.assertDictEqual({(): 88}, r.poll())
+        v = 99
+        r.do_read = lambda: v
+        self.assertDictEqual({(): 99}, r.poll())
+        v = 77
+        self.assertDictEqual({(): 77}, r.poll())
+
+    def test_poll_menues(self):
+        mock_e = Mock()  # Mock extension
+        rrf = RF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
+        r = R(mock_e, rrf)
+        self.assertDictEqual({(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}, r.poll())
+        r = R(mock_e, rrf, value=32)
+        d = {(k, j): 32 for k in ["a", "b"] for j in ["c", "d"]}
+        self.assertDictEqual(d, r.poll())
+        r.set(1, "a", "d")
+        d[("a", "d")] = 1
+        self.assertDictEqual(d, r.poll())
+        v = 99
+        r.do_read = lambda a, b: v
+        """Don't call do_read()"""
+        self.assertDictEqual(d, r.poll())
+        """get() call do_read()"""
+        r.get("b", "c")
+        d[("b", "c")] = 99
+        self.assertDictEqual(d, r.poll())
+
+    def test_poll_other(self):
+        mock_e = Mock()  # Mock extension
+        rrf = RF(mock_e, 'test', description="string %s number %n boolean %b")
+        r = R(mock_e, rrf)
+        self.assertDictEqual({}, r.poll())
+        r.set(2, "val", 1.2, True)
+        self.assertDictEqual({('val', 1.2, True): 2}, r.poll())
+        r.set(7, "val", 2.2, False)
+        self.assertDictEqual({('val', 1.2, True): 2, ('val', 2.2, False): 7}, r.poll())
 
 
 class TestSensor(unittest.TestCase):
@@ -112,16 +598,6 @@ class TestSensor(unittest.TestCase):
         self.assertIs(s.name, mock_sf.name)
         self.assertIs(s.description, mock_sf.description)
         self.assertIs(s.definition, mock_sf.definition)
-
-    def test_get_and_set(self):
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
-        s = S(mock_e, mock_sf, value=56)
-        self.assertEqual(56, s.get())
-        s.set(67)
-        self.assertEqual(67, s.get())
-        s.set("hi")
-        self.assertEqual("hi", s.get())
 
     @patch("threading.RLock")
     def test_get_and_set_synchronize(self, m_lock):
@@ -176,13 +652,6 @@ class TestSensor(unittest.TestCase):
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
 
-    def test_reset(self):
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
-        s = S(mock_e, mock_sf)
-        """just call s.reset()"""
-        s.reset()
-
     @patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
@@ -193,7 +662,6 @@ class TestSensor(unittest.TestCase):
         s.reset()
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
-
 
     def test_do_read_behavior(self):
         mock_e = Mock()  # Mock the extension
@@ -206,9 +674,15 @@ class TestSensor(unittest.TestCase):
 
     def test_get_cgi(self):
         mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
-        s = S(mock_e, mock_sf)
+        sf = SF(mock_e, "My Name", default="a")
+        s = S(mock_e, sf)
         self.assertIsNone(s.get_cgi("a"))
+        self.assertIsNone(s.get_cgi("My%20Name"))
+        cgi = s.get_cgi("/My%20Name")
+        self.assertIsNotNone(cgi)
+        self.assertEqual("a", cgi(Mock(path="/My%20Name")))
+        s.do_read = lambda : "do_read"
+        self.assertEqual("do_read", cgi(Mock(path="/My%20Name")))
 
     def test_create(self):
         mock_e = Mock()
@@ -900,9 +1374,9 @@ class TestRequesterFactory(unittest.TestCase):
     def test_base(self):
         """Costructor take ExtensionDefinition as first argument and name as second"""
         med = Mock()
-        self.assertRaises(TypeError, RF)
-        self.assertRaises(TypeError, RF, med)
-        rf = RF(med, 'test')
+        self.assertRaises(TypeError, RQF)
+        self.assertRaises(TypeError, RQF, med)
+        rf = RQF(med, 'test')
         self.assertIs(med, rf.ed)
         self.assertEqual('test', rf.name)
         self.assertEqual('test', rf.description)
@@ -911,16 +1385,16 @@ class TestRequesterFactory(unittest.TestCase):
         self.assertDictEqual({}, rf.menu_dict)
 
     def test_is_a_ReporterFactory_instance(self):
-        rf = RF(Mock(), 'test')
-        self.assertIsInstance(rf, RRF)
+        rf = RQF(Mock(), 'test')
+        self.assertIsInstance(rf, RF)
 
     def test_create(self):
         """Create requester object"""
-        rf = RF(Mock(), 'test')
+        rf = RQF(Mock(), 'test')
         mock_extension = Mock()
         self.assertRaises(TypeError, rf.create)
         r = rf.create(mock_extension)
-        self.assertIsInstance(r, R)
+        self.assertIsInstance(r, RQ)
         self.assertIs(r.extension, mock_extension)
         self.assertIs(r.info, rf)
 
@@ -937,11 +1411,11 @@ class TestRequester(unittest.TestCase):
         mock_ed = Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and WaiterCommandFactory as second"""
-        self.assertRaises(TypeError, R)
-        self.assertRaises(TypeError, R, mock_e)
+        self.assertRaises(TypeError, RQ)
+        self.assertRaises(TypeError, RQ, mock_e)
 
-        rf = RF(ed=mock_ed, name="wait", description="Are you done?")
-        r = R(mock_e, rf)
+        rf = RQF(ed=mock_ed, name="wait", description="Are you done?")
+        r = RQ(mock_e, rf)
         self.assertIs(r.extension, mock_e)
         self.assertIs(r.info, rf)
         self.assertEqual("", r.value)
@@ -952,12 +1426,12 @@ class TestRequester(unittest.TestCase):
     def test_is_Reporter_subclass(self):
         mock_e = Mock()  # Mock the extension
         mock_rf = MagicMock()  # Mock the request info
-        r = R(mock_e, mock_rf)
-        self.assertIsInstance(r, RR)
+        r = RQ(mock_e, mock_rf)
+        self.assertIsInstance(r, R)
 
     def get_requester(self, name="requester", default=0, description=None, do_read=None):
         mock_e = Mock()
-        return R.create(mock_e, name=name, default=default, description=description, do_read=do_read)
+        return RQ.create(mock_e, name=name, default=default, description=description, do_read=do_read)
 
     def test_execute_busy_read_no_args(self):
         """Remove the busy argument even if there is an exception
@@ -1308,11 +1782,11 @@ class TestRequester(unittest.TestCase):
         self.assertEqual({}, cgi.headers)
         with patch.object(r, "get_async", autospec=True) as mock_get_async:
             self.assertEqual("", cgi(Mock(path="My%20Name/12/13")))
-            mock_get_async.assert_called_with(12,13)
+            mock_get_async.assert_called_with(12, 13)
 
     def test_create(self):
         mock_e = Mock()
-        r = R.create(mock_e, "requester")
+        r = RQ.create(mock_e, "requester")
         self.assertIs(mock_e, r.extension)
         self.assertEqual(r.name, "requester")
         self.assertEqual(r.type, "R")
@@ -1320,7 +1794,7 @@ class TestRequester(unittest.TestCase):
         def do_read():
             return "goofy"
 
-        r = R.create(mock_e, "requester2", default="RR", description="ASD", do_read=do_read)
+        r = RQ.create(mock_e, "requester2", default="RR", description="ASD", do_read=do_read)
         self.assertIs(mock_e, r.extension)
         self.assertEqual(r.name, "requester2")
         self.assertEqual(r.info.default, "RR")
@@ -1353,7 +1827,7 @@ class TestRequester(unittest.TestCase):
         Main cycle use set() to wake up thread"""
         r = self.get_requester()
 
-        ex=[]
+        ex = []
 
         def thread_body():
             try:
@@ -1377,7 +1851,7 @@ class TestRequester(unittest.TestCase):
         Main cycle use set() to wake up thread"""
         r = self.get_requester(description="%n %n %s")
 
-        ex=[]
+        ex = []
 
         def thread_body():
             try:
@@ -1390,7 +1864,7 @@ class TestRequester(unittest.TestCase):
         args = (12, 77, "minnie")
         t.start()
         with r._condition:
-            r._condition.wait_for(lambda: args in  r._ready, 0.1)
+            r._condition.wait_for(lambda: args in r._ready, 0.1)
         r.set(123, 12, 77, "minnie")  # Wakeup thread and do check
         t.join(0.2)
         self.assertFalse(t.isAlive())
@@ -1408,7 +1882,7 @@ class TestRequester(unittest.TestCase):
         r.set(123, 12, 77, "goofy")  # Don't wake up
         t.join(0.1)
         self.assertTrue(t.isAlive())
-        r.set(123,12, 77, "minnie")  # Wakeup thread and do check
+        r.set(123, 12, 77, "minnie")  # Wakeup thread and do check
         t.join(0.2)
         self.assertFalse(t.isAlive())
         if ex:
@@ -1466,7 +1940,7 @@ class TestBooleanBlock(unittest.TestCase):
 
     def test_is_Reporter_subclass(self):
         b = self.get_block()
-        self.assertIsInstance(b, RR)
+        self.assertIsInstance(b, R)
 
     def test_get_set_clear_simple(self):
         b = self.get_block()
@@ -1606,7 +2080,7 @@ class TestBooleanFactory(unittest.TestCase):
 
     def test_is_a_ReporterFactory_instance(self):
         bf = BF(Mock(), 'test')
-        self.assertIsInstance(bf, RRF)
+        self.assertIsInstance(bf, RF)
 
     def test_create(self):
         """Create requester object"""
@@ -1764,465 +2238,6 @@ class Test_utils(unittest.TestCase):
         self.assertRaises(AttributeError, lambda e: e.elements, d[2])
         self.assertSetEqual({"a", "b"}, d[3].elements)
         self.assertSetEqual({"c", "d"}, d[4].elements)
-
-
-class TestReporter(unittest.TestCase):
-    """Reporter are sensor blocks that support arguments"""
-
-    def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
-
-        """Costructor take extension as first argument and ReporterFactory as second"""
-        self.assertRaises(TypeError, RR)
-        self.assertRaises(TypeError, RR, mock_e)
-
-        rrf = RRF(ed=mock_ed, name="get_message", description="Get message from %s")
-        rr = RR(mock_e, rrf)
-        self.assertIs(rr.extension, mock_e)
-        self.assertIs(rr.info, rrf)
-        self.assertEqual({}, rr.value)
-        self.assertEqual('get_message', rr.name)
-        self.assertEqual('Get message from %s', rr.description)
-        self.assertEqual('r', rr.type)
-
-    def test_proxy(self):
-        """Check the proxy"""
-        mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the reporter info
-        r = RR(mock_e, mock_rf)
-        self.assertIs(r.type, mock_rf.type)
-        self.assertIs(r.name, mock_rf.name)
-        self.assertIs(r.description, mock_rf.description)
-        self.assertIs(r.definition, mock_rf.definition)
-        self.assertIs(r.signature, mock_rf.signature)
-
-    def test_get_should_respect_the_signature(self):
-        mock_e = Mock()  # Mock the extension
-        med = Mock()
-        rrf = RRF(med, 'test', description="Base Signature: no args")
-        r = RR(mock_e, rrf, value=13)
-        self.assertEqual(13, r.get())
-        self.assertRaises(TypeError, r.get, 1)
-        self.assertRaises(TypeError, r.get, "minnie")
-
-        """One string"""
-        rrf = RRF(med, 'test', description="Get info about %s")
-        r = RR(mock_e, rrf, value={None: "my default", "sentinel": "you got it"})
-        self.assertRaises(TypeError, r.get)
-        self.assertRaises(TypeError, r.get, "first", "second")
-        self.assertEqual("you got it", r.get("sentinel"))
-        self.assertEqual("my default", r.get("wrong"))
-        self.assertEqual("my default", r.get(12))
-        self.assertEqual("my default", r.get("32.4"))
-        self.assertEqual("my default", r.get(3.4))
-
-        """One string, one float, one menu"""
-        rrf = RRF(med, 'test', description="Get info about %s, age %n, gender %m.gender", gender=["male", "female"])
-        r = RR(mock_e, rrf, value={None: "my default", "sentinel": {None: "default age",
-                                                                    32: {"male": "MALE", "female": "FEMALE"},
-                                                                    12: {"male": "MalE"}}})
-
-        self.assertRaises(TypeError, r.get)
-        self.assertRaises(TypeError, r.get, "first")
-        self.assertRaises(TypeError, r.get, "first", 2)
-        self.assertRaises(TypeError, r.get, "first", 2, "male", "other")
-
-        self.assertEqual("MALE", r.get("sentinel", 32, "male"))
-        self.assertEqual("FEMALE", r.get("sentinel", 32, "female"))
-        self.assertEqual("MalE", r.get("sentinel", 12, "male"))
-        self.assertEqual("default age", r.get("sentinel", 12, "female"))  # last default
-        self.assertEqual("default age", r.get("sentinel", 5, "female"))  # age default
-        self.assertEqual("my default", r.get("sent", 12, "male"))  # name default
-
-        self.assertRaises(TypeError, r.get, "sentinel", 32, "MALE")
-
-    def test_set_should_respect_the_signature(self):
-        mock_e = Mock()  # Mock the extension
-        med = Mock()
-        rrf = RRF(med, 'test', description="Base Signature: no args")
-        r = RR(mock_e, rrf, value=13)
-        r.set(12)
-        self.assertRaises(TypeError, r.set, 10, 1)
-        self.assertRaises(TypeError, r.set, 11, "minnie")
-
-        """One string"""
-        rrf = RRF(med, 'test', description="Get info about %s")
-        r = RR(mock_e, rrf, value={None: "my default", "sentinel": "you got it"})
-        self.assertRaises(TypeError, r.set, "No info")
-        self.assertRaises(TypeError, r.set, "No info", "john", "other")
-        r.set("No info", "john")
-        self.assertEqual("you got it", r.get("sentinel"))
-        self.assertEqual("No info", r.get("john"))
-        self.assertEqual("my default", r.get("wrong"))
-        self.assertEqual("my default", r.get(12))
-        self.assertEqual("my default", r.get("32.4"))
-        self.assertEqual("my default", r.get(3.4))
-
-        """One string, one float, one menu"""
-        rrf = RRF(med, 'test', description="Get info about %s, age %n, gender %m.gender", gender=["male", "female"])
-        r = RR(mock_e, rrf, value={None: "my default", "sentinel": {None: "default age",
-                                                                    32: {"male": "MALE", "female": "FEMALE"},
-                                                                    12: {"male": "MalE"}}})
-
-        self.assertRaises(TypeError, r.set)
-        self.assertRaises(TypeError, r.set, "GOLD", "first")
-        self.assertRaises(TypeError, r.set, "GOLD", "first", 2)
-        self.assertRaises(TypeError, r.set, "GOLD", "first", 2, "male", "other")
-
-        r.set("GOLD", "john", 25, "male")
-        self.assertEqual("GOLD", r.get("john", 25, "male"))
-        self.assertEqual("MALE", r.get("sentinel", 32, "male"))
-        # Override
-        r.set("MaLe", "sentinel", 32, "male")
-        self.assertEqual("MaLe", r.get("sentinel", 32, "male"))
-
-        self.assertRaises(TypeError, r.set, "GOLD", "sentinel", 32, "MALE")
-
-    def test_reset_recover_default_value(self):
-        mock_e = Mock()  # Mock extension
-        rrf = RRF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
-        r = RR(mock_e, rrf)
-        orig_d = {k: {j: "" for j in ["c", "d"]} for k in ["a", "b"]}
-
-        d = copy.deepcopy(orig_d)
-        orig_results = {(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}
-        results = orig_results.copy()
-        self.assertDictEqual(d, r.value)
-        self.assertDictEqual(results, r.poll())
-        r.set(33, "a", "c")
-        d["a"]["c"] = results[("a", "c")] = 33
-        self.assertDictEqual(d, r.value)
-        self.assertDictEqual(results, r.poll())
-        r.reset()
-        self.assertDictEqual(orig_d, r.value)
-        self.assertDictEqual(orig_results, r.poll())
-
-        """No trivial default"""
-        rrf = RRF(mock_e, 'test', default={None: 45, "a": {"d": 30}, "b": {None: 19}},
-                  description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
-        r = RR(mock_e, rrf)
-        orig_d = {"a": {"c": 45, "d": 30}, "b": {"c": 19, "d": 19}}
-        d = copy.deepcopy(orig_d)
-        orig_results = {("a", "c"): 45,
-                        ("a", "d"): 30,
-                        ("b", "c"): 19,
-                        ("b", "d"): 19,
-        }
-        results = orig_results.copy()
-        self.assertDictEqual(d, r.value)
-        self.assertDictEqual(results, r.poll())
-        r.set(-3, "a", "c")
-        d["a"]["c"] = results[("a", "c")] = -3
-        self.assertDictEqual(d, r.value)
-        self.assertDictEqual(results, r.poll())
-        r.reset()
-        self.assertDictEqual(orig_d, r.value)
-        self.assertDictEqual(orig_results, r.poll())
-
-    def test_do_read(self):
-        mock_e = Mock()  # Mock the extension
-        rrf = RRF(mock_e, 'test', description="Base")
-        r = RR(mock_e, rrf)
-        r.set("ss")
-        self.assertEqual("ss", r.get())
-        r.do_read = lambda: "AA"
-        self.assertEqual("AA", r.get())
-
-        """Change Signature"""
-        rrf = RRF(mock_e, 'test', description="menu %m.gender", gender=["male", "female"])
-        r = RR(mock_e, rrf)
-        r.do_read = lambda g: g.upper()
-        self.assertEqual("MALE", r.get("male"))
-        self.assertDictEqual({"male": "MALE", "female": ""}, r.value)
-        """Raise exception wrong signature"""
-        r.do_read = lambda: "NO CALL"
-        self.assertRaises(TypeError, r.get, "male")
-        r.do_read = lambda a, b: "NO CALL"
-        self.assertRaises(TypeError, r.get, "male")
-        """Don't mask exception"""
-
-        def _raise(a):
-            raise Exception(a)
-
-        r.do_read = _raise
-        self.assertRaises(Exception, r.get, "male")
-
-        "Respect float"
-        rrf = RRF(mock_e, 'test', description="number %n")
-        r = RR(mock_e, rrf)
-        r.do_read = lambda a: a * 2
-        self.assertEqual(1.2, r.get(0.6))
-        self.assertEqual(1.2, r.get("0.6"))
-        self.assertEqual(2.0, r.get(1))
-
-
-    @patch("threading.RLock", autospec=True)
-    def test_get_and_set_synchronize(self, m_lock):
-        m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock extension
-        mock_rf = MagicMock()  # Mock reporter info
-        r = RR(mock_e, mock_rf, value=56)
-        r.get()
-        self.assertTrue(m_lock.__enter__.called)
-        self.assertTrue(m_lock.__exit__.called)
-        m_lock.reset_mock()
-        r.set("ss")
-        self.assertTrue(m_lock.__enter__.called)
-        self.assertTrue(m_lock.__exit__.called)
-        m_lock.reset_mock()
-
-        """Change signature"""
-        mock_rf.signature = (float, str)
-        r = RR(mock_e, mock_rf, value={})
-        r.get(1.0, "Robert")
-        self.assertTrue(m_lock.__enter__.called)
-        self.assertTrue(m_lock.__exit__.called)
-        m_lock.reset_mock()
-        r.set("ss", 1.0, "Robert")
-
-    def test_value(self):
-        """1) return last computed value
-           1-a) if signature is empty return value
-           1-b) return a dictionary of resolved result
-           2) synchronize
-        """
-        mock_e = Mock()  # Mock extension
-        mock_rf = MagicMock()  # Mock reporter info
-        r = RR(mock_e, mock_rf, value=56)
-        self.assertEqual(56, r.value)
-        r.set("ss")
-        self.assertEqual("ss", r.value)
-
-        """Simple case: one menue exstension"""
-        rrf = RRF(mock_e, 'test', description="Numbers of %m.gender", gender=["male", "female"])
-        vals = {"male": 12, "female": 32}
-        r = RR(mock_e, rrf, value=vals)
-        self.assertDictEqual(vals, r.value)
-        """Must be a copy"""
-        v = r.value
-        v["male"] = 1
-        self.assertEqual(vals["male"], 12)
-        self.assertDictEqual(vals, r.value)
-
-        rrf = RRF(mock_e, 'test', description="Numbers of %m.gender from %m.state", gender=["male", "female"],
-                  state=["Italy", "USA", "Germany"])
-        r = RR(mock_e, rrf, value=21)
-        d = {k: {j: 21 for j in ["Italy", "USA", "Germany"]} for k in ["male", "female"]}
-        self.assertDictEqual(d, r.value)
-
-        rrf = RRF(mock_e, 'test', description="Numbers of %d.gender from %d.state", gender=["male", "female"],
-                  state=["Italy", "USA", "Germany"])
-        r = RR(mock_e, rrf, value={"male": {None: 33}, "female": {"USA": 11, None: 44}, None: 1})
-        d = {"male": {j: 33 for j in ["Italy", "USA", "Germany"]}}
-        d["female"] = {j: 44 for j in ["Italy", "Germany"]}
-        d["female"]["USA"] = 11
-        self.assertDictEqual(d, r.value)
-        r.set(77, "male", "Italy")
-        d["male"]["Italy"] = 77
-        self.assertDictEqual(d, r.value)
-        r.set(99, "unknown", "French")
-
-        d["unknown"] = {j: 1 for j in ["Italy", "USA", "Germany"]}
-        d["unknown"]["French"] = 99
-
-        self.assertDictEqual(d, r.value)
-
-        rrf = RRF(mock_e, 'test', description="string %s menu %m.gender", gender=["male", "female"])
-        r = RR(mock_e, rrf, value=55)
-        self.assertDictEqual({}, r.value)
-        r.set(12, "test", "male")
-        self.assertDictEqual({"test": {"male": 12, "female": 55}}, r.value)
-
-        with patch("threading.RLock") as m_lock:
-            m_lock = m_lock.return_value
-            """We must rebuild s to mock lock"""
-            r = RR(mock_e, rrf, value=75)
-            r.value
-            self.assertTrue(m_lock.__enter__.called)
-            self.assertTrue(m_lock.__exit__.called)
-            m_lock.reset_mock()
-            r._set_value(32, "test", "female")
-            self.assertTrue(m_lock.__enter__.called)
-            self.assertTrue(m_lock.__exit__.called)
-
-    def test_get_cgi(self):
-        """Standard description with o arguments"""
-        mock_e = Mock()  # Mock extension
-        rrf = RRF(mock_e, 'My Name', description="Base")
-        r = RR(mock_e, rrf)
-        self.assertIsNone(r.get_cgi("not your cgi"))
-        self.assertIsNone(r.get_cgi("My%20Name"))
-        """Must start by /"""
-        """execute in line get() method"""
-        cgi = r.get_cgi("/My%20Name")
-        self.assertIsNotNone(cgi)
-        r.do_read = lambda: 54321
-        self.assertEqual("54321", cgi(Mock(path="My%20Name")))
-
-        """More args return None"""
-        self.assertIsNone(r.get_cgi("/My%20Name/1234"))
-
-        rrf = RRF(mock_e, 'My Name', description="string %s number %n boolean %b menu %m.menu editable menu %d.ed_menu",
-                  menu=["a", "b"], ed_menu=["c", "d"])
-        r = RR(mock_e, rrf)
-        self.assertIsNone(r.get_cgi("/My%20Name"))
-        self.assertIsNone(r.get_cgi("/My%20Name/test"))
-        self.assertIsNone(r.get_cgi("/My%20Name/test/1.2"))
-        self.assertIsNone(r.get_cgi("/My%20Name/test/1.2/true"))
-        self.assertIsNone(r.get_cgi("/My%20Name/test/1.2/true/a"))
-        cgi = r.get_cgi("/My%20Name/test/1.2/true/a/k")
-        self.assertIsNotNone(cgi)
-        r.do_read = lambda *args: ",".join(map(str, args))
-        self.assertEqual("test,1.2,True,a,k", cgi(Mock(path="My%20Name/test/1.2/true/a/k")))
-        self.assertIsNone(r.get_cgi("/My%20Name/test/aa/true/a/d"))
-        self.assertIsNone(r.get_cgi("/My%20Name/test/1/false/d/d"))
-
-    def test_create(self):
-        mock_e = Mock()
-        r = RR.create(mock_e, "reporter")
-        self.assertIs(mock_e, r.extension)
-        self.assertEqual(r.name, "reporter")
-
-        def do_read():
-            return "goofy"
-
-        r = RR.create(mock_e, "reporter2", default="S", description="No Args", do_read=do_read)
-        self.assertIs(mock_e, r.extension)
-        self.assertEqual(r.name, "reporter2")
-        self.assertEqual(r.info.default, "S")
-        self.assertEqual(r.description, "No Args")
-        self.assertEqual(r.get(), "goofy")
-
-        """Wrong do_read() signature"""
-        self.assertRaises(TypeError, RR.create, mock_e, "reporter2", default="S", description="string %s",
-                          do_read=do_read)
-
-        def do_read(v):
-            return v.upper()
-
-        r = RR.create(mock_e, "reporter2", default="S", description="string %s", do_read=do_read)
-        self.assertEqual(r.get("goofy"), "GOOFY")
-
-    def test_poll_base(self):
-        """Standard description with o arguments"""
-        mock_e = Mock()  # Mock extension
-        rrf = RRF(mock_e, 'test', description="Base")
-        r = RR(mock_e, rrf)
-        self.assertDictEqual({(): ''}, r.poll())
-        r = RR(mock_e, rrf, value=32)
-        self.assertDictEqual({(): 32}, r.poll())
-        r.set(88)
-        self.assertDictEqual({(): 88}, r.poll())
-        v = 99
-        r.do_read = lambda: v
-        self.assertDictEqual({(): 99}, r.poll())
-        v = 77
-        self.assertDictEqual({(): 77}, r.poll())
-
-    def test_poll_menues(self):
-        mock_e = Mock()  # Mock extension
-        rrf = RRF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
-        r = RR(mock_e, rrf)
-        self.assertDictEqual({(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}, r.poll())
-        r = RR(mock_e, rrf, value=32)
-        d = {(k, j): 32 for k in ["a", "b"] for j in ["c", "d"]}
-        self.assertDictEqual(d, r.poll())
-        r.set(1, "a", "d")
-        d[("a", "d")] = 1
-        self.assertDictEqual(d, r.poll())
-        v = 99
-        r.do_read = lambda a, b: v
-        """Don't call do_read()"""
-        self.assertDictEqual(d, r.poll())
-        """get() call do_read()"""
-        r.get("b", "c")
-        d[("b", "c")] = 99
-        self.assertDictEqual(d, r.poll())
-
-    def test_poll_other(self):
-        mock_e = Mock()  # Mock extension
-        rrf = RRF(mock_e, 'test', description="string %s number %n boolean %b")
-        r = RR(mock_e, rrf)
-        self.assertDictEqual({}, r.poll())
-        r.set(2, "val", 1.2, True)
-        self.assertDictEqual({('val', 1.2, True): 2}, r.poll())
-        r.set(7, "val", 2.2, False)
-        self.assertDictEqual({('val', 1.2, True): 2, ('val', 2.2, False): 7}, r.poll())
-
-
-class TestReporterFactory(unittest.TestCase):
-    """We are testing reporter descriptors (sensor with arguments). They define name and description and provide
-    a signature: a tuple of functions that take the arguments as string and return the arguments to use
-    in do_read() and set() methods."""
-
-    def test_base(self):
-        """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
-        self.assertRaises(TypeError, RRF)
-        self.assertRaises(TypeError, RRF, med)
-        rrf = RRF(med, 'test')
-        self.assertIs(med, rrf.ed)
-        self.assertEqual('test', rrf.name)
-        self.assertEqual('test', rrf.description)
-        self.assertEqual("", rrf.default)
-        self.assertEqual('r', rrf.type)
-        self.assertDictEqual({}, rrf.menu_dict)
-
-    def apply_signature(self, sig, values):
-        return [f(v) for f, v in zip(sig, values)]
-
-    def test_signature(self):
-        """Return the signature of do_read() and set() method. To do the work use parse_description"""
-        med = Mock()
-        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=["left", "right"])
-        vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
-        self.assertEqual(vals, [3, "left", "joe"])
-
-        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s",
-                  hands={"left": 0, "right": 1})
-        vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
-        self.assertEqual(vals, [3, 0, "joe"])
-        vals = self.apply_signature(rrf.signature, ("5.2", "right", "Ely"))
-        self.assertEqual(vals, [5.2, 1, "Ely"])
-
-        """Change a dict must not change behaviour"""
-        m = {"left": 0, "right": 1}
-        rrf = RRF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=m)
-        vals = self.apply_signature(rrf.signature, ("1", "right", "Vincent"))
-        self.assertEqual(vals, [1, 1, "Vincent"])
-        m["right"] = 32
-        vals = self.apply_signature(rrf.signature, ("1", "right", "Vincent"))
-        self.assertEqual(vals, [1, 1, "Vincent"])
-
-    def test_create(self):
-        """Create the reporter object"""
-        rrf = RRF(Mock(), 'test')
-        mock_extension = Mock()
-        self.assertRaises(TypeError, rrf.create)
-        r = rrf.create(mock_extension, 1345)
-        self.assertIsInstance(r, RR)
-        self.assertIs(r.extension, mock_extension)
-        self.assertIs(r.info, rrf)
-        self.assertEqual(r.get(), 1345)
-
-        rrf = RRF(Mock(), 'test', description="string %s")
-        r = rrf.create(mock_extension)
-        self.assertIsInstance(r, RR)
-        self.assertIs(r.extension, mock_extension)
-        self.assertIs(r.info, rrf)
-        self.assertEqual(r.get("www"), "")
-        r.do_read = lambda v: v.upper()
-        self.assertEqual(r.get("www"), "WWW")
-
-    def test_menus(self):
-        med = Mock()
-        rrf = RRF(med, 'test', description="%m.hands", hands=["left", "right"])
-        self.assertDictEqual({"hands": ["left", "right"]}, rrf.menus)
-
-        """Pay attentiontion to mappers"""
-        rrf = RRF(med, 'test', description="%m.hands", hands={"Left": "left", "Right": "right"})
-        self.assertDictEqual({"hands": ["Left", "Right"]}, rrf.menus)
 
 
 if __name__ == '__main__':
