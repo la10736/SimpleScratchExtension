@@ -106,50 +106,6 @@ class TestReporterFactory(unittest.TestCase):
         self.assertDictEqual({"hands": ["Left", "Right"]}, rrf.menus)
 
 
-class TestSensorFactory(unittest.TestCase):
-    """Si tratta dei descrittori dei sensori. Definiscono il nome es la stringa di descrizione.
-    Inoltre definiscono il valore di default che deve avere il sensore quando lo si costruisce.
-    Devono avere il riferimento alla descrizione di estensione che li contiene.
-    """
-
-    def test_base(self):
-        """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
-        self.assertRaises(TypeError, SF)
-        self.assertRaises(TypeError, SF, med)
-        sf = SF(med, 'test')
-        self.assertIs(med, sf.ed)
-        self.assertEqual('test', sf.name)
-        self.assertEqual('test', sf.description)
-        self.assertEqual('', sf.default)
-        self.assertEqual('r', sf.type)
-
-        """Check nominal arguments and the other parameters"""
-        sf = SF(description='test test', default=1, ed=med, name='test')
-        self.assertIs(med, sf.ed)
-        self.assertEqual(('test', 'test test', 1), (sf.name, sf.description, sf.default))
-
-        """ed can be None"""
-        sf = SF(None, 'test', description='test test', default=1)
-        self.assertIsNone(sf.ed)
-        self.assertEqual(('test', 'test test', 1), (sf.name, sf.description, sf.default))
-
-    def test_is_a_ReporterFactory_instance(self):
-        sf = SF(Mock(), 'test')
-        self.assertIsInstance(sf, RF)
-
-    def test_create(self):
-        """Create the sensor object"""
-        sf = SF(Mock(), 'test')
-        mock_extension = Mock()
-        self.assertRaises(TypeError, sf.create)
-        s = sf.create(mock_extension, 1345)
-        self.assertIsInstance(s, S)
-        self.assertIs(s.extension, mock_extension)
-        self.assertIs(s.info, sf)
-        self.assertEqual(s.get(), 1345)
-
-
 class TestReporter(unittest.TestCase):
     """Reporter are sensor blocks that support arguments"""
 
@@ -562,6 +518,54 @@ class TestReporter(unittest.TestCase):
         self.assertDictEqual({('val', 1.2, True): 2, ('val', 2.2, False): 7}, r.poll())
 
 
+class TestSensorFactory(unittest.TestCase):
+    """Si tratta dei descrittori dei sensori. Definiscono il nome es la stringa di descrizione.
+    Inoltre definiscono il valore di default che deve avere il sensore quando lo si costruisce.
+    Devono avere il riferimento alla descrizione di estensione che li contiene.
+    """
+
+    def test_base(self):
+        """Costructor take ExtensionDefinition as first argument and name as second"""
+        med = Mock()
+        self.assertRaises(TypeError, SF)
+        self.assertRaises(TypeError, SF, med)
+        sf = SF(med, 'test')
+        self.assertIs(med, sf.ed)
+        self.assertEqual('test', sf.name)
+        self.assertEqual('test', sf.description)
+        self.assertEqual('', sf.default)
+        self.assertEqual('r', sf.type)
+
+        """Check nominal arguments and the other parameters"""
+        sf = SF(description='test test', default=1, ed=med, name='test')
+        self.assertIs(med, sf.ed)
+        self.assertEqual(('test', 'test test', 1), (sf.name, sf.description, sf.default))
+
+        """ed can be None"""
+        sf = SF(None, 'test', description='test test', default=1)
+        self.assertIsNone(sf.ed)
+        self.assertEqual(('test', 'test test', 1), (sf.name, sf.description, sf.default))
+
+    def test_invalid_description(self):
+        med = Mock()
+        self.assertRaises(ValueError, SF, med, "test", description="%n")
+
+    def test_is_a_ReporterFactory_instance(self):
+        sf = SF(Mock(), 'test')
+        self.assertIsInstance(sf, RF)
+
+    def test_create(self):
+        """Create the sensor object"""
+        sf = SF(Mock(), 'test')
+        mock_extension = Mock()
+        self.assertRaises(TypeError, sf.create)
+        s = sf.create(mock_extension, 1345)
+        self.assertIsInstance(s, S)
+        self.assertIs(s.extension, mock_extension)
+        self.assertIs(s.info, sf)
+        self.assertEqual(s.get(), 1345)
+
+
 class TestSensor(unittest.TestCase):
     """Sensor sono gli elementi base delle estensioni: internamente espongono la funzione di set()
     es come esetnsione quella di get() completamente sincrona. quando vengono costruite devono
@@ -699,6 +703,10 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.info.default, "S")
         self.assertEqual(s.description, "ASD")
         self.assertEqual(s.get(), "goofy")
+
+    def test_create_invalid_sescription(self):
+        mock_e = Mock()
+        self.assertRaises(ValueError, S.create, mock_e, "sensor", description="some sign %n")
 
     def test_poll(self):
         v = 41

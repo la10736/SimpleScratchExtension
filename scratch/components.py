@@ -415,7 +415,7 @@ class ReporterFactory(BlockFactory):
         :param ed: The ExtensionDefinition (container)
         :param name: the name of the sensor
         :param default: the default return value
-        :param description: the description of the sensor. If None the description is equla to the name
+        :param description: the description of the reporter. If None the description is equal to the name
         :param menu: menues
         :return:
         """
@@ -439,6 +439,19 @@ class Sensor(Reporter):
 class SensorFactory(ReporterFactory):
     block_constructor = Sensor
 
+    def __init__(self, ed, name, default="", description=None):
+        """
+        :param ed: The ExtensionDefinition (container)
+        :param name: the name of the sensor
+        :param default: the default return value
+        :param description: the description of the sensor. If None the description is equal to the name. It doesn't
+        accept parameters.
+        :return:
+        """
+        super().__init__(ed=ed, name=name, description=description)
+        if self.signature:
+            raise ValueError("Sensor doesn't support arguments: change description [{}]".format(description))
+        self._default = default
 
 class BooleanBlock(Reporter):
     @staticmethod

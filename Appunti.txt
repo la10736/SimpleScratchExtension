@@ -54,8 +54,6 @@ Aprire i ticket su scratch
 4) Forum http://scratch.mit.edu/discuss/32/
 
 TODO LIST:
-- Rimuovere Sensor o farlo sottoclasse dei Reporter
--- I Sensor non devono permettere di creare componenti con più argomenti
 - Commands con argomenti (gia' fatti?)
 - Riposta home servizio con json della descrizione
 - supporto per i valori di default da comunicare nella desc (dovrebbero restare nella factory)
