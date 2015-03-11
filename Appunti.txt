@@ -54,7 +54,7 @@ Aprire i ticket su scratch
 4) Forum http://scratch.mit.edu/discuss/32/
 
 TODO LIST:
-- Riposta home servizio con json della descrizione
+- Risposta home servizio con json della descrizione
 - supporto per i valori di default da comunicare nella desc (dovrebbero restare nella factory)
 - Minisito (Flask?) con link dei servizi registrati: i servizi si registrano via web
 - Fixare il microsito Flask
