@@ -1290,14 +1290,21 @@ class TestWaiterCommand(unittest.TestCase):
         self.assertTrue(m_lock.__exit__.called)
         m_lock.reset_mock()
 
+        e = threading.Event()
+
         def do_command():
             # Check busy add
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
             m_lock.reset_mock()
+            e.set()
 
         w.do_command = do_command
         w.command(1234)
+        if not e.is_set():
+            e.wait(.2)
+        self.assertTrue(e.is_set())
+
 
         def do_command():
             pass
@@ -1705,14 +1712,21 @@ class TestRequester(unittest.TestCase):
         self.assertTrue(m_lock.__exit__.called)
         m_lock.reset_mock()
 
+        e = threading.Event()
+
         def do_read():
             # Check busy add
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
             m_lock.reset_mock()
+            e.set()
 
         r.do_read = do_read
         r.get_async(1234)
+        #Make sure thread is done
+        if not e.is_set():
+            e.wait(0.2)
+        self.assertTrue(e.is_set())
 
         def do_read():
             pass

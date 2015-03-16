@@ -629,7 +629,8 @@ class WaiterCommand(Command):
                                  target=self.execute_busy_command,
                                  args=(busy,) + args)
             t.setDaemon(True)
-            self._busy.add(busy)
+            with self._lock:
+                self._busy.add(busy)
             t.start()
         with self._lock:
             self._value = args
@@ -680,7 +681,6 @@ class Requester(Reporter):
     def _set_value(self, value, *args):
         args = tuple(args)
         with self._condition:
-            print("PRE "+str(self._ready))
             super()._set_value(value, *args)
             if not hasattr(self, "do_read"):
                 s = {}
@@ -691,7 +691,6 @@ class Requester(Reporter):
                     busy = s.pop()
                     self._new_result(busy, value, None)
             self._ready.discard(args)
-            print(self._ready)
             self._condition.notify_all()
 
     def _new_result(self, busy, v="invalid", exception=None):
@@ -733,7 +732,8 @@ class Requester(Reporter):
                                  target=self.execute_busy_read,
                                  args=(busy,) + args)
             t.setDaemon(True)
-            self._busy.add(busy)
+            with self._lock:
+                self._busy.add(busy)
             t.start()
 
     def busy_get(self, *args):
