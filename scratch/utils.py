@@ -1,3 +1,5 @@
+import json
+
 __author__ = 'michele'
 import socket
 
@@ -11,3 +13,10 @@ def get_local_address(destination, port=37852):
         return s.getsockname()[0]
     except socket.error:
         return ""
+
+def save_service_description(service, fname, host='127.0.0.1'):
+    description = service.description
+    description["host"] = host
+    with open(fname, "w") as f:
+        json.dump(description, fp=f)
+
