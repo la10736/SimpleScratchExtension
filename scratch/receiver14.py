@@ -1,10 +1,9 @@
-from itertools import zip_longest
-import itertools
+from six.moves import zip_longest
 
 __author__ = 'michele'
 
 import logging
-import socketserver
+from six.moves import socketserver
 import struct
 import select
 from collections import defaultdict
@@ -67,7 +66,7 @@ class Scratch14SensorReceiverHandler(socketserver.StreamRequestHandler):
     def __init__(self, request, client_address, srv):
         logging.debug('__init__')
         self.sensors = {}
-        super(Scratch14SensorReceiverHandler, self).__init__(request, client_address, srv)
+        socketserver.StreamRequestHandler.__init__(self, request, client_address, srv)
         return
 
     def _sensor_update(self, args):

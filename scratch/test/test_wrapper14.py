@@ -1,7 +1,9 @@
 __author__ = 'michele'
 
 import unittest
-from scratch.portability.mock import patch, Mock
+import six
+six.add_move(six.MovedModule("mock", "mock", "unittest.mock"))
+from six.moves import mock
 from scratch.receiver14 import tokenizer, split_message, Scratch14SensorReceiverHandler
 
 
@@ -45,10 +47,10 @@ class TestParser(unittest.TestCase):
         msg = "jUStteSt   " + chr(12) * 37
         self.assertEqual(("justtest", "  " + chr(12) * 37), split_message(msg))
 
-    @patch("socketserver.StreamRequestHandler.__init__")
-    def test_sensor_update(self,msrh):
+    @mock.patch("six.moves.socketserver.StreamRequestHandler.__init__")
+    def test_sensor_update(self, msrh):
         msrh.return_value = None
-        hdl = Scratch14SensorReceiverHandler(Mock(), Mock(), Mock())
+        hdl = Scratch14SensorReceiverHandler(mock.Mock(), mock.Mock(), mock.Mock())
         hdl._sensor_update("a b c d")
         self.assertDictEqual(hdl.sensors, {"a": "b", "c": "d"})
         hdl._sensor_update('a "F" es')

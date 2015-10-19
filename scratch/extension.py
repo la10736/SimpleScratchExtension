@@ -1,9 +1,12 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import six
+
+from six.moves.BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import io
 import logging
-from socketserver import ThreadingMixIn
+from six.moves.socketserver import ThreadingMixIn
 import threading
-import urllib
+from six.moves import urllib
+
 import weakref
 from scratch.cgi import CGI
 from scratch.components import SensorFactory, CommandFactory, HatFactory, WaiterCommandFactory, RequesterFactory, \
@@ -18,7 +21,7 @@ DEFAULT_QUEUE_SIZE = 10
 
 
 class ExtensionDefinition():
-    """Contiene la descrizione di una estensione con i descrittore. Di fatto è una
+    """Contiene la descrizione di una estensione con i descrittore. Di fatto e' una
     classe astratta: la sua implementazione es' la factory per costruire le estensioni
     """
     _names = {}
@@ -124,7 +127,7 @@ class ExtensionDefinition():
         return self._components[name]
 
 
-class Extension():
+class Extension(object):
     """The object that contains components and will be served from ExtensionService()"""
 
     def __init__(self):
@@ -235,7 +238,7 @@ def render_args(*args):
     return "/".join([urllib.parse.quote(_map_arg(a)) for a in args])
 
 
-class ExtensionService():
+class ExtensionService(object):
     """The extension service: create by a Extension object it binds the server that respond to
     Scratch query. Expose method to get the extension, start and stop the service.
     """

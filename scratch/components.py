@@ -2,7 +2,8 @@ import copy
 import inspect
 import logging
 import threading
-import urllib.parse
+from six.moves import urllib
+# import urllib.parse
 import weakref
 import re
 import collections
@@ -115,7 +116,7 @@ def parse_description(description, **kwargs):
     return tuple([_desc_mapper(e, **kwargs) for e in elements])
 
 
-class BlockFactory():
+class BlockFactory(object):
     type = "u"  # unknown
     block_constructor = None  # Abstract
     cb_arg = None  # Abstract
@@ -177,7 +178,7 @@ class BlockFactory():
         return ret
 
 
-class Block():
+class Block(object):
     def __init__(self, extension, info, value=None):
         self._ex = weakref.ref(extension)
         self._info = info
@@ -272,7 +273,7 @@ class Reporter(Block):
 
     def __init__(self, extension, info, value=None):
         v = self._get_default_value(value, info)
-        super().__init__(extension, info, value=v)
+        super(Reporter, self).__init__(extension, info, value=v)
 
     def _get_default_value(self, value=None, info=None):
         if info is None:
@@ -419,7 +420,7 @@ class ReporterFactory(BlockFactory):
         :param menu: menues
         :return:
         """
-        super().__init__(ed=ed, name=name, description=description, **menus)
+        super(ReporterFactory, self).__init__(ed=ed, name=name, description=description, **menus)
         self._default = default
 
     @property
@@ -448,7 +449,7 @@ class SensorFactory(ReporterFactory):
         accept parameters.
         :return:
         """
-        super().__init__(ed=ed, name=name, description=description)
+        super(ReporterFactory, self).__init__(ed=ed, name=name, description=description)
         if self.signature:
             raise ValueError("Sensor doesn't support arguments: change description [{}]".format(description))
         self._default = default
@@ -461,10 +462,10 @@ class BooleanBlock(Reporter):
         return factory.create(extension=extension, do_read=do_read)
 
     def get(self, *args, **kwargs):
-        return "true" if super().get(*args, **kwargs) else "false"
+        return "true" if super(BooleanBlock, self).get(*args, **kwargs) else "false"
 
     def set(self, value=True, *args, **kwargs):
-        super().set(bool(value), *args, **kwargs)
+        super(BooleanBlock, self).set(bool(value), *args, **kwargs)
 
     def clear(self):
         """Clear the value"""
@@ -501,7 +502,7 @@ class Command(Block):
         return factory.create(extension=extension, do_command=do_command)
 
     def __init__(self, extension, info):
-        super().__init__(extension=extension, info=info)
+        super(Command, self).__init__(extension=extension, info=info)
         self._value = None
 
     @property
@@ -551,7 +552,7 @@ class CommandFactory(BlockFactory):
         :param kwargs: the menus entry lists
         :return:
         """
-        super().__init__(ed=ed, name=name, description=description, **kwargs)
+        super(CommandFactory, self).__init__(ed=ed, name=name, description=description, **kwargs)
         self._default = default
         if not self._check_description():
             raise ValueError("Wrong description and/or values/menus")
@@ -565,7 +566,7 @@ class CommandFactory(BlockFactory):
 
     @property
     def definition(self):
-        return super().definition + [d for d in self._default]
+        return super(CommandFactory, self).definition + [d for d in self._default]
 
 
 class Hat(Block):
@@ -580,7 +581,7 @@ class Hat(Block):
         return factory.create(extension=extension, do_flag=do_flag)
 
     def __init__(self, extension, info):
-        super().__init__(extension=extension, info=info, value=False)
+        super(Hat, self).__init__(extension=extension, info=info, value=False)
 
     @property
     def state(self):
@@ -667,7 +668,7 @@ class Requester(Reporter):
         return factory.create(extension=extension, do_read=do_read)
 
     def __init__(self, extension, info, value=None):
-        super().__init__(extension, info, value)
+        super(Requester, self).__init__(extension, info, value)
         self._condition = threading.Condition(self._lock)
         self._ready = set()
         self._results = []
@@ -681,7 +682,7 @@ class Requester(Reporter):
         args = tuple(args)
         with self._condition:
             print("PRE "+str(self._ready))
-            super()._set_value(value, *args)
+            super(Requester, self)._set_value(value, *args)
             if not hasattr(self, "do_read"):
                 s = {}
                 if args in self._pending_async_results:

@@ -1,17 +1,21 @@
-import http
-import socketserver
+import unittest
+from six.moves.BaseHTTPServer import HTTPServer
+
+# import http
+import six
+six.add_move(six.MovedModule("mock", "mock", "unittest.mock"))
+from six.moves import socketserver
 import time
 import scratch
-
-__author__ = 'michele'
-import unittest
-from scratch.portability.mock import patch, Mock, PropertyMock, MagicMock
+from six.moves import mock
 from scratch.extension import ExtensionDefinition as ED, render_args
 from scratch.extension import Extension as E
 from scratch.extension import ExtensionService as ES, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
 from scratch.extension import ExtensionBase as EB
 from scratch.extension import ExtensionServiceBase as EBS
 from scratch.components import CommandFactory, Sensor, HatFactory
+
+__author__ = 'michele'
 
 
 class TestExstensionDefinition(unittest.TestCase):
@@ -55,7 +59,7 @@ class TestExstensionDefinition(unittest.TestCase):
         """Verificare che il componente venga registrato nell'insimeme dei componenti usando
         la property."""
         e = ED("es")
-        c = Mock()
+        c = mock.Mock()
         e._register_components(c)
         self.assertIn(c, e.components)
         self.assertEqual(1, len(e.components))
@@ -63,21 +67,21 @@ class TestExstensionDefinition(unittest.TestCase):
         e._register_components(c)
         self.assertIn(c, e.components)
         self.assertEqual(1, len(e.components))
-        d = Mock()
+        d = mock.Mock()
         e._register_components(d)
         self.assertSetEqual({c, d}, set(e.components))
         """Register components prende anche piu' di un elemento"""
-        f, g, h, i = (Mock() for _ in range(4))
+        f, g, h, i = (mock.Mock() for _ in range(4))
         e._register_components(f, g, h, i)
         self.assertSetEqual({c, d, f, g, h, i}, set(e.components))
 
         """deve dare eccezione se il componente NON ha l'attributo name"""
-        c = Mock()
+        c = mock.Mock()
         del c.name
         self.assertRaises(TypeError, e._register_components, c)
 
         """Se anche uno solo non funziona non devono essere aggiunti nessuno"""
-        c, d, f = Mock(), Mock(), Mock()
+        c, d, f = mock.Mock(), mock.Mock(), mock.Mock()
         c.name, f.name = "c", "f"
         del d.name
         self.assertRaises(TypeError, e._register_components, c, d, f)
@@ -85,15 +89,15 @@ class TestExstensionDefinition(unittest.TestCase):
         self.assertNotIn(c, e.components)
         self.assertNotIn(f, e.components)
 
-        c = Mock()
+        c = mock.Mock()
         c.name = "name_uguale"
         e._register_components(c)
-        d = Mock()
+        d = mock.Mock()
         d.name = "name_uguale"
 
         self.assertRaises(ValueError, e._register_components, d)
 
-        c, f = Mock(), Mock()
+        c, f = mock.Mock(), mock.Mock()
         """Se anche uno solo non funziona non devono essere aggiunti nessuno"""
         self.assertRaises(ValueError, e._register_components, c, d, f)
         self.assertNotIn(c, e.components)
@@ -103,21 +107,21 @@ class TestExstensionDefinition(unittest.TestCase):
         """Verificare che il componente venga deregistrato dall'insimeme dei componenti usando
         la property."""
         e = ED("es")
-        components = [Mock() for _ in range(4)]
+        components = [mock.Mock() for _ in range(4)]
         e._register_components(*components)
         for c in components:
             e._deregister_components(c)
             self.assertNotIn(c, set(e.components))
         self.assertSetEqual(set(), set(e.components))
-        components = [Mock() for _ in range(4)]
+        components = [mock.Mock() for _ in range(4)]
         e._register_components(*components)
         e._deregister_components(*components)
         self.assertSetEqual(set(), set(e.components))
-        self.assertRaises(KeyError, e._deregister_components, Mock())
+        self.assertRaises(KeyError, e._deregister_components, mock.Mock())
 
     def test_get_component(self):
         e = ED("MyName")
-        c, d, f = Mock(), Mock(), Mock()
+        c, d, f = mock.Mock(), mock.Mock(), mock.Mock()
         c.name, d.name, f.name = "c", "d", "f"
         e._register_components(c, d, f)
         self.assertIs(c, e.get_component("c"))
@@ -143,7 +147,7 @@ class TestExstensionDefinition(unittest.TestCase):
         self.assertEqual(1, len(cc))
         ci = ed.get_component_info("beep")
         self.assertIs(ci, cmd_i)
-        with patch.object(ed, "_create_and_register", autospec=True) as mock_cr:
+        with mock.patch.object(ed, "_create_and_register", autospec=True) as mock_cr:
             ed.add_command("dd", ("ss", 3), "wwww", hh="ww")
             mock_cr.assert_called_with(CommandFactory, name="dd", default=("ss", 3), description="wwww", hh="ww")
 
@@ -155,7 +159,7 @@ class TestExstensionDefinition(unittest.TestCase):
         self.assertEqual(1, len(cc))
         hi = ed.get_component_info("alarm")
         self.assertIs(hi, hat_i)
-        with patch.object(ed, "_create_and_register", autospec=True) as mock_cr:
+        with mock.patch.object(ed, "_create_and_register", autospec=True) as mock_cr:
             ed.add_hat("dd", "wwww", hh="ww")
             mock_cr.assert_called_with(HatFactory, name="dd", description="wwww", hh="ww")
 
@@ -237,7 +241,7 @@ class TestExtension(unittest.TestCase):
         ES._unregister_all()
         ED._unregister_all()
 
-    @patch("scratch.extension.Extension._init_components")
+    @mock.patch("scratch.extension.Extension._init_components")
     def test_base(self, mock_init_components):
         e = E()
         self.assertIsNotNone(e)
@@ -246,11 +250,11 @@ class TestExtension(unittest.TestCase):
     def test_define_factory(self):
         e = E()
         self.assertIsNone(e.factory)
-        factory = Mock()
+        factory = mock.Mock()
         e.define_factory(factory)
         self.assertIs(e.factory, factory)
 
-        self.assertRaises(RuntimeError, e.define_factory, Mock())
+        self.assertRaises(RuntimeError, e.define_factory, mock.Mock())
 
         """But not if it the same"""
         e.define_factory(factory)
@@ -267,7 +271,7 @@ class TestExtension(unittest.TestCase):
         e._init_components()
         self.assertEqual(set(), set(e.components))
 
-        Ex.tst_cmp = [Mock() for _ in range(3)]
+        Ex.tst_cmp = [mock.Mock() for _ in range(3)]
         e._init_components()
         self.assertEqual(set(e.components), set(Ex.tst_cmp))
 
@@ -276,7 +280,7 @@ class TestExtension(unittest.TestCase):
         """The set of the components"""
         e = E()
         self.assertEqual(set(), set(e.components))
-        cmps = {"a": Mock(), "b": Mock()}
+        cmps = {"a": mock.Mock(), "b": mock.Mock()}
         e._components = cmps
         self.assertEqual(set(cmps.values()), set(e.components))
 
@@ -286,7 +290,7 @@ class TestExtension(unittest.TestCase):
         e = E()
         components = e.components_name
         self.assertSetEqual(set(), set(e.components_name))
-        cmps = {"a": Mock(), "b": Mock()}
+        cmps = {"a": mock.Mock(), "b": mock.Mock()}
         e._components = cmps
         self.assertEqual(set(cmps.keys()), set(e.components_name))
 
@@ -294,12 +298,12 @@ class TestExtension(unittest.TestCase):
         e = E()
         self.assertListEqual([], e.block_specs)
 
-    @patch("scratch.components.Sensor.definition", new_callable=PropertyMock)
+    @mock.patch("scratch.components.Sensor.definition", new_callable=mock.PropertyMock)
     def test_block_specs_more_components(self, m_sensor_definition):
         ed = ED("def")
         ed.add_sensor("test1")
         e = EB(ed)
-        definitions = [Mock()]
+        definitions = [mock.Mock()]
         m_sensor_definition.side_effect = definitions
         self.assertListEqual(definitions, e.block_specs)
 
@@ -307,7 +311,7 @@ class TestExtension(unittest.TestCase):
         for i in range(5):
             ed.add_sensor("test{}".format(i))
         e = EB(ed)
-        definitions = [Mock() for _ in range(5)]
+        definitions = [mock.Mock() for _ in range(5)]
         m_sensor_definition.side_effect = definitions
         self.assertListEqual(definitions, e.block_specs)
 
@@ -389,8 +393,8 @@ class TestExtension(unittest.TestCase):
         e = EB(ed)
         # empty
         self.assertSetEqual(set(), e.busy)
-        """Mock Block.busy .> just waiter command call it"""
-        with patch("scratch.components.WaiterCommand.busy", new_callable=PropertyMock) as mock_busy:
+        """mock.Mock Block.busy .> just waiter command call it"""
+        with mock.patch("scratch.components.WaiterCommand.busy", new_callable=mock.PropertyMock) as mock_busy:
             mock_busy.side_effect = [{123, 456}, {1, 2, 3, 4, 456}]
             self.assertSetEqual({123, 456, 1, 2, 3, 4}, e.busy)
 
@@ -439,13 +443,13 @@ class TestExtension(unittest.TestCase):
         e.results
 
 
-@patch("scratch.extension.Extension.components", new_callable=PropertyMock)
-@patch("scratch.extension.Extension.do_reset", autospec=True)
+@mock.patch("scratch.extension.Extension.components", new_callable=mock.PropertyMock)
+@mock.patch("scratch.extension.Extension.do_reset", autospec=True)
 def test_reset(self, mock_do_reset, mock_components):
     """Must call reset() for each component, do_reset() (method designed to
     override)"""
     e = E()
-    components = [Mock() for _ in range(5)]
+    components = [mock.Mock() for _ in range(5)]
     mock_components.return_value = components
     e.reset()
     for m in components:
@@ -462,7 +466,7 @@ class TestExtensionService(unittest.TestCase):
         ES._unregister_all()
         ED._unregister_all()
 
-    @patch("scratch.extension._BaseHttpMultithreadServer")
+    @mock.patch("scratch.extension._BaseHttpMultithreadServer")
     def test_base(self, mock_httpserver):
         """Costructor need just name"""
         self.assertRaises(TypeError, ES)
@@ -481,7 +485,7 @@ class TestExtensionService(unittest.TestCase):
         s = scratch.extension._BaseHttpMultithreadServer(("127.0.0.1", 33445),
                                                          ES.HTTPHandler)
         self.assertIsInstance(s, socketserver.ThreadingMixIn)
-        self.assertIsInstance(s, http.server.HTTPServer)
+        self.assertIsInstance(s, HTTPServer)
         self.assertTrue(s.daemon_threads)
         self.assertTrue(s.allow_reuse_address)
 
@@ -503,8 +507,8 @@ class TestExtensionService(unittest.TestCase):
         self.assertIs(ess, ES.get_registered("donald duck"))
         self.assertRaises(KeyError, ES.get_registered, "minnie")
 
-    @patch("scratch.extension.Extension.menus", new_callable=PropertyMock)
-    @patch("scratch.extension.Extension.block_specs", new_callable=PropertyMock)
+    @mock.patch("scratch.extension.Extension.menus", new_callable=mock.PropertyMock)
+    @mock.patch("scratch.extension.Extension.block_specs", new_callable=mock.PropertyMock)
     def test_description(self, m_extension_block_specs, m_extension_menus):
         es = ES(E(), "MyName")
         block_specs = []
@@ -517,8 +521,8 @@ class TestExtensionService(unittest.TestCase):
         m_extension_block_specs.return_value = block_specs
         m_extension_menus.return_value = menus
         self.assertDictEqual(res, es.description)
-        block_specs = [Mock(), Mock()]
-        menus = {Mock(): Mock()}
+        block_specs = [mock.Mock(), mock.Mock()]
+        menus = {mock.Mock(): mock.Mock()}
         res["blockSpecs"] = block_specs
         res["menus"] = menus
         m_extension_block_specs.return_value = block_specs
@@ -527,8 +531,8 @@ class TestExtensionService(unittest.TestCase):
 
     def test_addr_port_proxy(self):
         es = ES(E(), "MyName")
-        es._http.server_name = Mock()
-        es._http.server_port = Mock()
+        es._http.server_name = mock.Mock()
+        es._http.server_port = mock.Mock()
         self.assertIs(es.address, es._http.server_name)
         self.assertIs(es.port, es._http.server_port)
 
@@ -570,18 +574,18 @@ class TestExtensionService(unittest.TestCase):
         self.assertEqual("", es.problem_render(""))
         self.assertEqual("_problem My Problem\n", es.problem_render("My Problem"))
 
-    @patch("scratch.extension.Extension.problem", new_callable=PropertyMock)
-    @patch("scratch.extension.ExtensionService.problem_render", return_value="problem_render\n")
-    @patch("scratch.extension.Extension.results", new_callable=PropertyMock)
-    @patch("scratch.extension.ExtensionService.results_render", return_value="results_render\n")
-    @patch("scratch.extension.Extension.busy", new_callable=PropertyMock)
-    @patch("scratch.extension.ExtensionService.busy_render", return_value="busy_render\n")
-    @patch("scratch.extension.Extension.poll")
-    @patch("scratch.extension.ExtensionService.poll_dict_render", return_value="dict_render\n")
+    @mock.patch("scratch.extension.Extension.problem", new_callable=mock.PropertyMock)
+    @mock.patch("scratch.extension.ExtensionService.problem_render", return_value="problem_render\n")
+    @mock.patch("scratch.extension.Extension.results", new_callable=mock.PropertyMock)
+    @mock.patch("scratch.extension.ExtensionService.results_render", return_value="results_render\n")
+    @mock.patch("scratch.extension.Extension.busy", new_callable=mock.PropertyMock)
+    @mock.patch("scratch.extension.ExtensionService.busy_render", return_value="busy_render\n")
+    @mock.patch("scratch.extension.Extension.poll")
+    @mock.patch("scratch.extension.ExtensionService.poll_dict_render", return_value="dict_render\n")
     def test__poll_cgi(self, mock_poll_dict_render, mock_poll, mock_busy_render, mock_busy,
                        mock_results_render, mock_results, mock_problem_render, mock_problem):
         es = ES(E(), "MyName")
-        self.assertEqual(es._poll_cgi(Mock(autospec=ES.HTTPHandler)), mock_poll_dict_render.return_value +
+        self.assertEqual(es._poll_cgi(mock.Mock(autospec=ES.HTTPHandler)), mock_poll_dict_render.return_value +
                          mock_busy_render.return_value + mock_results_render.return_value +
                          mock_problem_render.return_value)
         self.assertTrue(mock_poll.called)
@@ -597,7 +601,7 @@ class TestExtensionService(unittest.TestCase):
         self.assertTrue(mock_problem.called)
         mock_problem_render.assert_called_with(mock_problem.return_value)
 
-    @patch("threading.Thread", autospec=True)
+    @mock.patch("threading.Thread", autospec=True)
     def test_start(self, mock_thread):
         es = ES(E(), "MyName")
         """Check if the costructor set _server_thread to None"""
@@ -614,8 +618,8 @@ class TestExtensionService(unittest.TestCase):
         self.assertFalse(mock_thread.called)
         self.assertFalse(mock_server_thread.start.called)
 
-    @patch("threading.Thread.join", autospec=True)
-    @patch("scratch.extension.HTTPServer.shutdown", autospec=True)
+    @mock.patch("threading.Thread.join", autospec=True)
+    @mock.patch("scratch.extension.HTTPServer.shutdown", autospec=True)
     def test_stop(self, mock_shutdown, mock_join):
         es = ES(E(), "MyName")
         self.assertIsNone(es._server_thread)
@@ -662,11 +666,11 @@ class TestExtensionService(unittest.TestCase):
 
         es = ES(Ex(), "MyName")
         self.assertFalse(Ex.reset_call)
-        self.assertEqual("", es.reset(Mock()))
+        self.assertEqual("", es.reset(mock.Mock()))
         self.assertTrue(Ex.reset_call)
 
-    @patch("scratch.extension.ExtensionService._resolve_components_cgi", autospec=True)
-    @patch("scratch.extension.ExtensionService._resolve_local_cgi", autospec=True)
+    @mock.patch("scratch.extension.ExtensionService._resolve_components_cgi", autospec=True)
+    @mock.patch("scratch.extension.ExtensionService._resolve_local_cgi", autospec=True)
     def test__get_cgi(self, mock_resolve_local_cgi, mock_resolve_components_cgi):
         """Resolve order:
         - ask to component : _resolve_components_cgi()
@@ -681,28 +685,28 @@ class TestExtensionService(unittest.TestCase):
         self.assertIs(mock_resolve_local_cgi.return_value, es._get_cgi("my_path"))
         self.assertTrue(mock_resolve_components_cgi.called)
 
-    @patch("scratch.extension.Extension.components", new_callable=PropertyMock)
+    @mock.patch("scratch.extension.Extension.components", new_callable=mock.PropertyMock)
     def test__resolve_components_cgi(self, mock_components):
         es = ES(E(), "MyName")
-        components = [Mock() for _ in range(5)]
+        components = [mock.Mock() for _ in range(5)]
         mock_components.return_value = components
         for m in components[:-1]:
             m.get_cgi.return_value = None
         self.assertIs(components[-1].get_cgi.return_value, es._resolve_components_cgi("path"))
         for m in components:
-            m.get_cgi.assert_called_wirth("path")
+            m.get_cgi.assert_called_with("path")
         components[0].get_cgi.return_value = 11
         self.assertEqual(11, es._resolve_components_cgi("path"))
 
 
-@patch("scratch.extension.BaseHTTPRequestHandler.command", create=True, new_callable=PropertyMock)
-@patch("scratch.extension.BaseHTTPRequestHandler.path", create=True, new_callable=PropertyMock)
-@patch("scratch.extension.BaseHTTPRequestHandler.request_version", create=True, new_callable=PropertyMock)
-@patch("scratch.extension.ExtensionService.HTTPHandler.end_headers")
-@patch("scratch.extension.ExtensionService.HTTPHandler.send_header")
-@patch("scratch.extension.ExtensionService.HTTPHandler.send_response")
-@patch("scratch.extension.ExtensionService.HTTPHandler.log_request")
-@patch("scratch.extension.ExtensionService.HTTPHandler.parse_request", return_value=True)
+@mock.patch("scratch.extension.BaseHTTPRequestHandler.command", create=True, new_callable=mock.PropertyMock)
+@mock.patch("scratch.extension.BaseHTTPRequestHandler.path", create=True, new_callable=mock.PropertyMock)
+@mock.patch("scratch.extension.BaseHTTPRequestHandler.request_version", create=True, new_callable=mock.PropertyMock)
+@mock.patch("scratch.extension.ExtensionService.HTTPHandler.end_headers")
+@mock.patch("scratch.extension.ExtensionService.HTTPHandler.send_header")
+@mock.patch("scratch.extension.ExtensionService.HTTPHandler.send_response")
+@mock.patch("scratch.extension.ExtensionService.HTTPHandler.log_request")
+@mock.patch("scratch.extension.ExtensionService.HTTPHandler.parse_request", return_value=True)
 class TestExtension_HTTPHandler(unittest.TestCase):
     """We will test http request to extension handler"""
 
@@ -710,14 +714,14 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         """Clean all registered descriptions"""
         ES._unregister_all()
         self.es = ES(E(), "MyName")
-        self.mock_request = MagicMock()
+        self.mock_request = mock.MagicMock()
         self.mock_client_address = ("1.2.3.4", 34234)
         self.mock_wfile = self.mock_request.makefile.return_value
 
     def do_request(self):
         handler = ES.HTTPHandler(self.mock_request, self.mock_client_address, self.es._http)
 
-    @patch("scratch.extension.ExtensionService._poll_cgi", return_value="POLLER")
+    @mock.patch("scratch.extension.ExtensionService._poll_cgi", return_value="POLLER")
     def test_handle_poll(self, mock_cgi, mock_parse_request, mock_log_request,
                          mock_send_response, mock_send_header, mock_end_headers,
                          mock_request_version,
@@ -783,7 +787,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         mock_send_header.assert_called_with("Content-type", "text/xml")
         self.assertTrue(mock_end_headers.called)
 
-    @patch("scratch.extension.ExtensionService.reset", return_value="")
+    @mock.patch("scratch.extension.ExtensionService.reset", return_value="")
     def test_handle_reset_all_xml(self, mock_reset, mock_parse_request, mock_log_request,
                                   mock_send_response, mock_send_header, mock_end_headers,
                                   mock_request_version,

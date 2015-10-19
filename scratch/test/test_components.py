@@ -1,19 +1,19 @@
-import copy
-import threading
-
-from mock import ANY, call, MagicMock
-
-
-__author__ = 'michele'
-
 import unittest
-from scratch.portability.mock import patch, Mock
+
+import six
+six.add_move(six.MovedModule("mock", "mock", "unittest.mock"))
+from six.moves import mock
 from scratch.components import Sensor as S, SensorFactory as SF, \
     Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
     WaiterCommand as W, WaiterCommandFactory as WF, Requester as RQ, \
     RequesterFactory as RQF, BooleanBlock as B, BooleanFactory as BF, \
     Reporter as R, ReporterFactory as RF
 from scratch.components import parse_description, to_bool
+import copy
+import threading
+
+__author__ = 'michele'
+
 
 
 class TestReporterFactory(unittest.TestCase):
@@ -23,7 +23,7 @@ class TestReporterFactory(unittest.TestCase):
 
     def test_base(self):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, RF)
         self.assertRaises(TypeError, RF, med)
         rrf = RF(med, 'test')
@@ -39,7 +39,7 @@ class TestReporterFactory(unittest.TestCase):
 
     def test_signature(self):
         """Return the signature of do_read() and set() method. To do the work use parse_description"""
-        med = Mock()
+        med = mock.Mock()
         rrf = RF(med, 'test', description="Give me %n fingers from %m.hands. Its name is %s", hands=["left", "right"])
         vals = self.apply_signature(rrf.signature, ("3", "left", "joe"))
         self.assertEqual(vals, [3, "left", "joe"])
@@ -62,8 +62,8 @@ class TestReporterFactory(unittest.TestCase):
 
     def test_create(self):
         """Create the reporter object"""
-        rrf = RF(Mock(), 'test')
-        mock_extension = Mock()
+        rrf = RF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, rrf.create)
         r = rrf.create(mock_extension, 1345)
         self.assertIsInstance(r, R)
@@ -71,7 +71,7 @@ class TestReporterFactory(unittest.TestCase):
         self.assertIs(r.info, rrf)
         self.assertEqual(r.get(), 1345)
 
-        rrf = RF(Mock(), 'test', description="string %s")
+        rrf = RF(mock.Mock(), 'test', description="string %s")
         r = rrf.create(mock_extension)
         self.assertIsInstance(r, R)
         self.assertIs(r.extension, mock_extension)
@@ -82,8 +82,8 @@ class TestReporterFactory(unittest.TestCase):
 
     def test_create_do_read(self):
         """Create a sensor object and set do_read() method"""
-        rf = RF(Mock(), 'test')
-        mock_extension = Mock()
+        rf = RF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
 
         def do_read():
             return "goofy"
@@ -93,11 +93,11 @@ class TestReporterFactory(unittest.TestCase):
 
     def test_definition(self):
         """Give reporter definition as list to send as JSON object """
-        rf = RF(ed=Mock(), name="goofy", default=1234, description="donald duck")
+        rf = RF(ed=mock.Mock(), name="goofy", default=1234, description="donald duck")
         self.assertListEqual(["r", "donald duck", "goofy"], rf.definition)
 
     def test_menus(self):
-        med = Mock()
+        med = mock.Mock()
         rrf = RF(med, 'test', description="%m.hands", hands=["left", "right"])
         self.assertDictEqual({"hands": ["left", "right"]}, rrf.menus)
 
@@ -110,8 +110,8 @@ class TestReporter(unittest.TestCase):
     """Reporter are sensor blocks that support arguments"""
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and ReporterFactory as second"""
         self.assertRaises(TypeError, R)
@@ -128,8 +128,8 @@ class TestReporter(unittest.TestCase):
 
     def test_proxy(self):
         """Check the proxy"""
-        mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the reporter info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_rf = mock.MagicMock()  # Mock the reporter info
         r = R(mock_e, mock_rf)
         self.assertIs(r.type, mock_rf.type)
         self.assertIs(r.name, mock_rf.name)
@@ -138,8 +138,8 @@ class TestReporter(unittest.TestCase):
         self.assertIs(r.signature, mock_rf.signature)
 
     def test_get_should_respect_the_signature(self):
-        mock_e = Mock()  # Mock the extension
-        med = Mock()
+        mock_e = mock.Mock()  # Mock the extension
+        med = mock.Mock()
         rrf = RF(med, 'test', description="Base Signature: no args")
         r = R(mock_e, rrf, value=13)
         self.assertEqual(13, r.get())
@@ -178,8 +178,8 @@ class TestReporter(unittest.TestCase):
         self.assertRaises(TypeError, r.get, "sentinel", 32, "MALE")
 
     def test_set_should_respect_the_signature(self):
-        mock_e = Mock()  # Mock the extension
-        med = Mock()
+        mock_e = mock.Mock()  # Mock the extension
+        med = mock.Mock()
         rrf = RF(med, 'test', description="Base Signature: no args")
         r = R(mock_e, rrf, value=13)
         r.set(12)
@@ -220,7 +220,7 @@ class TestReporter(unittest.TestCase):
         self.assertRaises(TypeError, r.set, "GOLD", "sentinel", 32, "MALE")
 
     def test_reset_recover_default_value(self):
-        mock_e = Mock()  # Mock extension
+        mock_e = mock.Mock()  # Mock extension
         rrf = RF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
         r = R(mock_e, rrf)
         orig_d = {k: {j: "" for j in ["c", "d"]} for k in ["a", "b"]}
@@ -261,7 +261,7 @@ class TestReporter(unittest.TestCase):
         self.assertDictEqual(orig_results, r.poll())
 
     def test_do_read(self):
-        mock_e = Mock()  # Mock the extension
+        mock_e = mock.Mock()  # Mock the extension
         rrf = RF(mock_e, 'test', description="Base")
         r = R(mock_e, rrf)
         r.set("ss")
@@ -297,8 +297,8 @@ class TestReporter(unittest.TestCase):
         self.assertEqual(2.0, r.get(1))
 
     def test_get_and_set(self):
-        mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_rf = mock.MagicMock()  # Mock the sensor info
         r = R(mock_e, mock_rf, value=56)
         self.assertEqual(56, r.get())
         r.set(67)
@@ -306,11 +306,11 @@ class TestReporter(unittest.TestCase):
         r.set("hi")
         self.assertEqual("hi", r.get())
 
-    @patch("threading.RLock", autospec=True)
+    @mock.mock.patch("threading.RLock", autospec=True)
     def test_get_and_set_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock extension
-        mock_rf = MagicMock()  # Mock reporter info
+        mock_e = mock.Mock()  # Mock extension
+        mock_rf = mock.MagicMock()  # Mock reporter info
         r = R(mock_e, mock_rf, value=56)
         r.get()
         self.assertTrue(m_lock.__enter__.called)
@@ -336,8 +336,8 @@ class TestReporter(unittest.TestCase):
            1-b) return a dictionary of resolved result
            2) synchronize
         """
-        mock_e = Mock()  # Mock extension
-        mock_rf = MagicMock()  # Mock reporter info
+        mock_e = mock.Mock()  # Mock extension
+        mock_rf = mock.MagicMock()  # Mock reporter info
         r = R(mock_e, mock_rf, value=56)
         self.assertEqual(56, r.value)
         r.set("ss")
@@ -383,7 +383,7 @@ class TestReporter(unittest.TestCase):
         r.set(12, "test", "male")
         self.assertDictEqual({"test": {"male": 12, "female": 55}}, r.value)
 
-        with patch("threading.RLock") as m_lock:
+        with mock.mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """We must rebuild s to mock lock"""
             r = R(mock_e, rrf, value=75)
@@ -396,17 +396,17 @@ class TestReporter(unittest.TestCase):
             self.assertTrue(m_lock.__exit__.called)
 
     def test_reset(self):
-        mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_rf = mock.MagicMock()  # Mock the sensor info
         r = R(mock_e, mock_rf)
         """just call s.reset()"""
         r.reset()
 
-    @patch("threading.RLock")
+    @mock.mock.patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_rf = mock.MagicMock()  # Mock the sensor info
         r = R(mock_e, mock_rf)
         """just call s.reset()"""
         r.reset()
@@ -415,7 +415,7 @@ class TestReporter(unittest.TestCase):
 
     def test_get_cgi(self):
         """Standard description with o arguments"""
-        mock_e = Mock()  # Mock extension
+        mock_e = mock.Mock()  # Mock extension
         rrf = RF(mock_e, 'My Name', description="Base")
         r = R(mock_e, rrf)
         self.assertIsNone(r.get_cgi("not your cgi"))
@@ -425,7 +425,7 @@ class TestReporter(unittest.TestCase):
         cgi = r.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
         r.do_read = lambda: 54321
-        self.assertEqual("54321", cgi(Mock(path="My%20Name")))
+        self.assertEqual("54321", cgi(mock.Mock(path="My%20Name")))
 
         """More args return None"""
         self.assertIsNone(r.get_cgi("/My%20Name/1234"))
@@ -441,12 +441,12 @@ class TestReporter(unittest.TestCase):
         cgi = r.get_cgi("/My%20Name/test/1.2/true/a/k")
         self.assertIsNotNone(cgi)
         r.do_read = lambda *args: ",".join(map(str, args))
-        self.assertEqual("test,1.2,True,a,k", cgi(Mock(path="My%20Name/test/1.2/true/a/k")))
+        self.assertEqual("test,1.2,True,a,k", cgi(mock.Mock(path="My%20Name/test/1.2/true/a/k")))
         self.assertIsNone(r.get_cgi("/My%20Name/test/aa/true/a/d"))
         self.assertIsNone(r.get_cgi("/My%20Name/test/1/false/d/d"))
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         r = R.create(mock_e, "reporter")
         self.assertIs(mock_e, r.extension)
         self.assertEqual(r.name, "reporter")
@@ -473,7 +473,7 @@ class TestReporter(unittest.TestCase):
 
     def test_poll_base(self):
         """Standard description with o arguments"""
-        mock_e = Mock()  # Mock extension
+        mock_e = mock.Mock()  # Mock extension
         rrf = RF(mock_e, 'test', description="Base")
         r = R(mock_e, rrf)
         self.assertDictEqual({(): ''}, r.poll())
@@ -488,7 +488,7 @@ class TestReporter(unittest.TestCase):
         self.assertDictEqual({(): 77}, r.poll())
 
     def test_poll_menues(self):
-        mock_e = Mock()  # Mock extension
+        mock_e = mock.Mock()  # Mock extension
         rrf = RF(mock_e, 'test', description="menu 1 %m.menu1 menu 2 %m.menu2", menu1=["a", "b"], menu2=["c", "d"])
         r = R(mock_e, rrf)
         self.assertDictEqual({(k, j): "" for k in ["a", "b"] for j in ["c", "d"]}, r.poll())
@@ -508,7 +508,7 @@ class TestReporter(unittest.TestCase):
         self.assertDictEqual(d, r.poll())
 
     def test_poll_other(self):
-        mock_e = Mock()  # Mock extension
+        mock_e = mock.Mock()  # Mock extension
         rrf = RF(mock_e, 'test', description="string %s number %n boolean %b")
         r = R(mock_e, rrf)
         self.assertDictEqual({}, r.poll())
@@ -526,7 +526,7 @@ class TestSensorFactory(unittest.TestCase):
 
     def test_base(self):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, SF)
         self.assertRaises(TypeError, SF, med)
         sf = SF(med, 'test')
@@ -547,17 +547,17 @@ class TestSensorFactory(unittest.TestCase):
         self.assertEqual(('test', 'test test', 1), (sf.name, sf.description, sf.default))
 
     def test_invalid_description(self):
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(ValueError, SF, med, "test", description="%n")
 
     def test_is_a_ReporterFactory_instance(self):
-        sf = SF(Mock(), 'test')
+        sf = SF(mock.Mock(), 'test')
         self.assertIsInstance(sf, RF)
 
     def test_create(self):
         """Create the sensor object"""
-        sf = SF(Mock(), 'test')
-        mock_extension = Mock()
+        sf = SF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, sf.create)
         s = sf.create(mock_extension, 1345)
         self.assertIsInstance(s, S)
@@ -572,8 +572,8 @@ class TestSensor(unittest.TestCase):
     avere comunque un valore es rendono sempre un valore coerente"""
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and SensorFactory as second"""
         self.assertRaises(TypeError, S)
@@ -595,19 +595,19 @@ class TestSensor(unittest.TestCase):
 
     def test_proxy(self):
         """Check the proxy"""
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_sf = mock.MagicMock()  # Mock the sensor info
         s = S(mock_e, mock_sf)
         self.assertIs(s.type, mock_sf.type)
         self.assertIs(s.name, mock_sf.name)
         self.assertIs(s.description, mock_sf.description)
         self.assertIs(s.definition, mock_sf.definition)
 
-    @patch("threading.RLock")
+    @mock.mock.patch("threading.RLock")
     def test_get_and_set_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_sf = mock.MagicMock()  # Mock the sensor info
         s = S(mock_e, mock_sf, value=56)
         s.get()
         self.assertTrue(m_lock.__enter__.called)
@@ -621,8 +621,8 @@ class TestSensor(unittest.TestCase):
         """1) return last computed value
            2) synchronize
         """
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_sf = mock.MagicMock()  # Mock the sensor info
         v = 0
 
         def get():
@@ -644,7 +644,7 @@ class TestSensor(unittest.TestCase):
         s.get()
         self.assertEqual(12, s.value)
 
-        with patch("threading.RLock") as m_lock:
+        with mock.mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """We must rebuild s to mock lock"""
             s = S(mock_e, mock_sf, value=56)
@@ -656,11 +656,11 @@ class TestSensor(unittest.TestCase):
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
 
-    @patch("threading.RLock")
+    @mock.mock.patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_sf = mock.MagicMock()  # Mock the sensor info
         s = S(mock_e, mock_sf)
         """just call s.reset()"""
         s.reset()
@@ -668,8 +668,8 @@ class TestSensor(unittest.TestCase):
         self.assertTrue(m_lock.__exit__.called)
 
     def test_do_read_behavior(self):
-        mock_e = Mock()  # Mock the extension
-        mock_sf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_sf = mock.MagicMock()  # Mock the sensor info
         s = S(mock_e, mock_sf)
         s.set("ss")
         self.assertEqual("ss", s.get())
@@ -677,19 +677,19 @@ class TestSensor(unittest.TestCase):
         self.assertEqual("AA", s.get())
 
     def test_get_cgi(self):
-        mock_e = Mock()  # Mock the extension
+        mock_e = mock.Mock()  # Mock the extension
         sf = SF(mock_e, "My Name", default="a")
         s = S(mock_e, sf)
         self.assertIsNone(s.get_cgi("a"))
         self.assertIsNone(s.get_cgi("My%20Name"))
         cgi = s.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
-        self.assertEqual("a", cgi(Mock(path="/My%20Name")))
+        self.assertEqual("a", cgi(mock.Mock(path="/My%20Name")))
         s.do_read = lambda : "do_read"
-        self.assertEqual("do_read", cgi(Mock(path="/My%20Name")))
+        self.assertEqual("do_read", cgi(mock.Mock(path="/My%20Name")))
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         s = S.create(mock_e, "sensor")
         self.assertIs(mock_e, s.extension)
         self.assertEqual(s.name, "sensor")
@@ -705,7 +705,7 @@ class TestSensor(unittest.TestCase):
         self.assertEqual(s.get(), "goofy")
 
     def test_create_invalid_sescription(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         self.assertRaises(ValueError, S.create, mock_e, "sensor", description="some sign %n")
 
     def test_poll(self):
@@ -714,7 +714,7 @@ class TestSensor(unittest.TestCase):
         def r():
             return v
 
-        mock_e = Mock()
+        mock_e = mock.Mock()
         s = S.create(mock_e, "sensor", do_read=r)
         self.assertDictEqual({(): v}, s.poll())
         v = 13
@@ -724,10 +724,10 @@ class TestSensor(unittest.TestCase):
 class TestCommandFactory(unittest.TestCase):
     """We are testing the commands descriptors. They define name and description."""
 
-    @patch("scratch.components.CommandFactory._check_description", return_value=True)
+    @mock.mock.patch("scratch.components.CommandFactory._check_description", return_value=True)
     def test_base(self, mock_check_description):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, CF)
         self.assertRaises(TypeError, CF, med)
         cf = CF(med, 'test')
@@ -764,18 +764,18 @@ class TestCommandFactory(unittest.TestCase):
     def test__check_description(self):
         self.fail("IMPLEMENT")
 
-    @patch("scratch.components.CommandFactory._check_description", return_value=True)
+    @mock.patch("scratch.components.CommandFactory._check_description", return_value=True)
     def test_definition(self, mock_check_description):
         """Give command definition as list to send as JSON object """
-        cf = CF(ed=Mock(), name="goofy", default=(1234, "a"), description="donald duck")
+        cf = CF(ed=mock.Mock(), name="goofy", default=(1234, "a"), description="donald duck")
         self.assertListEqual([" ", "donald duck", "goofy", 1234, "a"], cf.definition)
-        cf = CF(ed=Mock(), name="sss")
+        cf = CF(ed=mock.Mock(), name="sss")
         self.assertListEqual([" ", "sss", "sss"], cf.definition)
 
     def test_create(self):
         """Create the command object"""
-        cf = CF(Mock(), 'test')
-        mock_extension = Mock()
+        cf = CF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, cf.create)
         c = cf.create(mock_extension)
         self.assertIsInstance(c, C)
@@ -784,8 +784,8 @@ class TestCommandFactory(unittest.TestCase):
 
     def test_create_do_command(self):
         """Create a command object and set do_command(*args) method"""
-        cf = CF(Mock(), 'test')
-        mock_extension = Mock()
+        cf = CF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         v = []
 
         def do_command(*args):
@@ -803,8 +803,8 @@ class TestCommand(unittest.TestCase):
     """
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and CommandFactory as second"""
         self.assertRaises(TypeError, C)
@@ -826,8 +826,8 @@ class TestCommand(unittest.TestCase):
 
     def test_proxy(self):
         """Check the proxy"""
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the command info
         c = C(mock_e, mock_cf)
         self.assertIs(c.type, mock_cf.type)
         self.assertIs(c.name, mock_cf.name)
@@ -835,7 +835,7 @@ class TestCommand(unittest.TestCase):
         self.assertIs(c.definition, mock_cf.definition)
 
     def test_command(self):
-        mock_e = Mock()  # Mock the extension
+        mock_e = mock.Mock()  # Mock the extension
         cf = CF(mock_e, 'test', description="Execute")
         c = C(mock_e, cf)
         self.assertIsNone(c.value)
@@ -858,17 +858,17 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(("A", "B"), c.value)
 
     def test_do_command_check_arguments(self):
-        mock_e = Mock()  # Mock the extension
+        mock_e = mock.Mock()  # Mock the extension
         cf = CF(mock_e, 'test', description="Execute")
         c = C(mock_e, cf)
         c.do_command = lambda: None
         c.command()
         self.assertRaises(TypeError, c.command, "a")
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_command_and_value_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
+        mock_e = mock.Mock()  # Mock the extension
         cf = CF(mock_e, 'test', description="Execute")
         c = C(mock_e, cf)
         c.command()
@@ -880,17 +880,17 @@ class TestCommand(unittest.TestCase):
         self.assertTrue(m_lock.__exit__.called)
 
     def test_reset(self):
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the sensor info
         c = C(mock_e, mock_cf)
         """just call c.reset()"""
         c.reset()
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the command info
         c = C(mock_e, mock_cf)
         """just call c.reset()"""
         c.reset()
@@ -898,8 +898,8 @@ class TestCommand(unittest.TestCase):
         self.assertTrue(m_lock.__exit__.called)
 
     def test_get_cgi(self):
-        mock_e = Mock()  # Mock the extension
-        mock_cf = Mock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.Mock()  # Mock the sensor info
         mock_cf.name = "My Name"
         cf = CF(mock_e, name='My Name', description="Execute")
         c = C(mock_e, cf)
@@ -909,15 +909,15 @@ class TestCommand(unittest.TestCase):
         cgi = c.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
         self.assertEqual({}, cgi.headers)
-        with patch.object(c, "command", autospec=True) as mock_command:
-            self.assertEqual("", cgi(Mock(path="My%20Name")))
+        with mock.patch.object(c, "command", autospec=True) as mock_command:
+            self.assertEqual("", cgi(mock.Mock(path="My%20Name")))
             mock_command.assert_called_with()
-            mock_command.reset_mock
-            self.assertEqual("", cgi(Mock(path="My%20Name/a/b/c%20d/1234")))
+            mock_command.reset_mock()
+            self.assertEqual("", cgi(mock.Mock(path="My%20Name/a/b/c%20d/1234")))
             mock_command.assert_called_with("a", "b", "c d", "1234")
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         c = C.create(mock_e, "control")
         self.assertIs(mock_e, c.extension)
         self.assertEqual(c.name, "control")
@@ -936,7 +936,7 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(v[-1], ("a", "b"))
 
     def test_poll(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         c = C.create(mock_e, "command")
         self.assertDictEqual({}, c.poll())
 
@@ -946,7 +946,7 @@ class TestHatFactory(unittest.TestCase):
 
     def test_base(self):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, HF)
         self.assertRaises(TypeError, HF, med)
         hf = HF(med, 'test')
@@ -972,15 +972,15 @@ class TestHatFactory(unittest.TestCase):
 
     def test_definition(self):
         """Give command definition as list to send as JSON object """
-        hf = HF(ed=Mock(), name="goofy", description="donald duck")
+        hf = HF(ed=mock.Mock(), name="goofy", description="donald duck")
         self.assertListEqual(["h", "donald duck", "goofy"], hf.definition)
-        hf = HF(ed=Mock(), name="sss")
+        hf = HF(ed=mock.Mock(), name="sss")
         self.assertListEqual(["h", "sss", "sss"], hf.definition)
 
     def test_create(self):
         """Create the hat object"""
-        hf = HF(Mock(), 'test')
-        mock_extension = Mock()
+        hf = HF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, hf.create)
         h = hf.create(mock_extension)
         self.assertIsInstance(h, H)
@@ -991,8 +991,8 @@ class TestHatFactory(unittest.TestCase):
         """Create a hat object and set do_flag() method (a callback that give True
         when you want raise the event
         """
-        hf = HF(Mock(), 'test')
-        mock_extension = Mock()
+        hf = HF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         flag = False
 
         def do_flag(*args):
@@ -1014,8 +1014,8 @@ class TestHat(unittest.TestCase):
     """
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and SensorFactory as second"""
         self.assertRaises(TypeError, H)
@@ -1037,8 +1037,8 @@ class TestHat(unittest.TestCase):
 
     def test_proxy(self):
         """Check the proxy"""
-        mock_e = Mock()  # Mock the extension
-        mock_hf = MagicMock()  # Mock the command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_hf = mock.MagicMock()  # Mock the command info
         h = H(mock_e, mock_hf)
         self.assertIs(h.type, mock_hf.type)
         self.assertIs(h.name, mock_hf.name)
@@ -1046,8 +1046,8 @@ class TestHat(unittest.TestCase):
         self.assertIs(h.definition, mock_hf.definition)
 
     def test_flag(self):
-        mock_e = Mock()  # Mock the extension
-        mock_hf = MagicMock()  # Mock the boolean info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_hf = mock.MagicMock()  # Mock the boolean info
         h = H(mock_e, mock_hf)
         self.assertFalse(h.state)
         h.flag()
@@ -1079,11 +1079,11 @@ class TestHat(unittest.TestCase):
         self.assertTrue(h.state)
         self.assertFalse(h.state)
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_flag_and_state_synchronize_do_flag_no(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_hf = MagicMock()  # Mock the hat info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_hf = mock.MagicMock()  # Mock the hat info
         h = H(mock_e, mock_hf)
         h.flag()
         self.assertTrue(m_lock.__enter__.called)
@@ -1099,32 +1099,32 @@ class TestHat(unittest.TestCase):
         self.assertFalse(m_lock.__exit__.called)
 
     def test_reset(self):
-        mock_e = Mock()  # Mock the extension
-        mock_hf = MagicMock()  # Mock the hat info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_hf = mock.MagicMock()  # Mock the hat info
         h = H(mock_e, mock_hf)
         """call h.reset() and check i f flag reset"""
         h.flag()
         h.reset()
         self.assertFalse(h.state)
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_hf = MagicMock()  # Mock the hat info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_hf = mock.MagicMock()  # Mock the hat info
         h = H(mock_e, mock_hf)
         h.reset()
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
 
     def test_get_cgi(self):
-        mock_e = Mock()  # Mock the extension
-        mock_hf = MagicMock()  # Mock the hat info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_hf = mock.MagicMock()  # Mock the hat info
         h = H(mock_e, mock_hf)
         self.assertIsNone(h.get_cgi("a"))
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         h = H.create(mock_e, "hat")
         self.assertIs(mock_e, h.extension)
         self.assertEqual(h.name, "hat")
@@ -1147,7 +1147,7 @@ class TestHat(unittest.TestCase):
         self.assertEqual(h.state, True)
 
     def test_poll(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         h = H.create(mock_e, "hat")
         self.assertDictEqual({}, h.poll())
 
@@ -1155,10 +1155,10 @@ class TestHat(unittest.TestCase):
 class TestWaiterCommandFactory(unittest.TestCase):
     """We are testing the commands that can wait descriptors. They define name and description."""
 
-    @patch("scratch.components.WaiterCommandFactory._check_description", return_value=True)
+    @mock.patch("scratch.components.WaiterCommandFactory._check_description", return_value=True)
     def test_base(self, mock_check_description):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, WF)
         self.assertRaises(TypeError, WF, med)
         wf = WF(med, 'test')
@@ -1170,13 +1170,13 @@ class TestWaiterCommandFactory(unittest.TestCase):
         self.assertDictEqual({}, wf.menu_dict)
 
     def test_is_a_CommandFactory_instance(self):
-        wf = WF(Mock(), 'test')
+        wf = WF(mock.Mock(), 'test')
         self.assertIsInstance(wf, CF)
 
     def test_create(self):
         """Create the waiter command object"""
-        wf = WF(Mock(), 'test')
-        mock_extension = Mock()
+        wf = WF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, wf.create)
         w = wf.create(mock_extension)
         self.assertIsInstance(w, W)
@@ -1191,8 +1191,8 @@ class TestWaiterCommand(unittest.TestCase):
     """
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and WaiterCommandFactory as second"""
         self.assertRaises(TypeError, W)
@@ -1208,16 +1208,16 @@ class TestWaiterCommand(unittest.TestCase):
         self.assertEqual('w', w.type)
 
     def test_is_Command_subclass(self):
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the command info
         w = W(mock_e, mock_cf)
         self.assertIsInstance(w, C)
 
     def test_execute_busy_command(self):
         """Remove the busy argument even if there is an exception
         """
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the command info
         w = W(mock_e, mock_cf)
         busy = 12345
         self.assertFalse(w.busy)
@@ -1256,16 +1256,16 @@ class TestWaiterCommand(unittest.TestCase):
 
         Only if extension implement do_command()
         """
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the command info
         w = W(mock_e, mock_cf)
         busy = 12345
-        w.do_command = Mock()
-        with patch("threading.Thread", autospec=True) as mock_thread_class:
+        w.do_command = mock.Mock()
+        with mock.patch("threading.Thread", autospec=True) as mock_thread_class:
             mock_thread = mock_thread_class.return_value
             w.command(busy, "a")
             self.assertIn(busy, w._busy)
-            mock_thread_class.assert_called_with(name=ANY, target=w.execute_busy_command, args=(busy, "a"))
+            mock_thread_class.assert_called_with(name=mock.ANY, target=w.execute_busy_command, args=(busy, "a"))
             mock_thread.setDaemon.assert_called_with(True)
             self.assertTrue(mock_thread.start.called)
         """Sanity chack without mocks"""
@@ -1273,17 +1273,17 @@ class TestWaiterCommand(unittest.TestCase):
 
         """Without do_command"""
         del w.do_command
-        with patch("threading.Thread", autospec=True) as mock_thread_class:
+        with mock.patch("threading.Thread", autospec=True) as mock_thread_class:
             w.command(busy, "a")
             self.assertFalse(mock_thread_class.called)
         """Sanity chack without mocks"""
         w.command(busy, "a")
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_busy_access_synchronize(self, m_lock):
         m_lock = m_lock.return_value
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the sensor info
         w = W(mock_e, mock_cf)
         w.busy
         self.assertTrue(m_lock.__enter__.called)
@@ -1310,8 +1310,8 @@ class TestWaiterCommand(unittest.TestCase):
 
     def test_reset(self):
         """Should reset busy set"""
-        mock_e = Mock()  # Mock the extension
-        mock_cf = MagicMock()  # Mock the sensor info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_cf = mock.MagicMock()  # Mock the sensor info
         w = W(mock_e, mock_cf)
         w._busy_add(1234)
         w._busy_add(2234)
@@ -1320,7 +1320,7 @@ class TestWaiterCommand(unittest.TestCase):
         w.reset()
         self.assertSetEqual(w.busy, set())
 
-        with patch("threading.RLock") as m_lock:
+        with mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """Must rebuild to hane the mock"""
             w = W(mock_e, mock_cf)
@@ -1329,8 +1329,8 @@ class TestWaiterCommand(unittest.TestCase):
             self.assertTrue(m_lock.__exit__.called)
 
     def test_get_cgi(self):
-        mock_e = Mock()  # Mock the extension
-        mock_wf = MagicMock()  # Mock the waiter command info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_wf = mock.MagicMock()  # Mock the waiter command info
         mock_wf.name = "My Name"
         w = W(mock_e, mock_wf)
         self.assertIsNone(w.get_cgi("not your cgi"))
@@ -1342,15 +1342,15 @@ class TestWaiterCommand(unittest.TestCase):
         cgi = w.get_cgi("/My%20Name/1234")
         self.assertIsNotNone(cgi)
         self.assertEqual({}, cgi.headers)
-        with patch.object(w, "command", autospec=True) as mock_command:
-            self.assertEqual("", cgi(Mock(path="My%20Name/3452")))
+        with mock.patch.object(w, "command", autospec=True) as mock_command:
+            self.assertEqual("", cgi(mock.Mock(path="My%20Name/3452")))
             mock_command.assert_called_with(3452)
             mock_command.reset_mock
-            self.assertEqual("", cgi(Mock(path="My%20Name/54321/b/c%20d/1234")))
+            self.assertEqual("", cgi(mock.Mock(path="My%20Name/54321/b/c%20d/1234")))
             mock_command.assert_called_with(54321, "b", "c d", "1234")
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         w = W.create(mock_e, "control")
         self.assertIsInstance(w, W)
         self.assertIs(mock_e, w.extension)
@@ -1371,7 +1371,7 @@ class TestWaiterCommand(unittest.TestCase):
         self.assertIs(do_command, w.do_command)
 
     def test_poll(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         w = W.create(mock_e, "wcommand")
         self.assertDictEqual({}, w.poll())
 
@@ -1381,7 +1381,7 @@ class TestRequesterFactory(unittest.TestCase):
 
     def test_base(self):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, RQF)
         self.assertRaises(TypeError, RQF, med)
         rf = RQF(med, 'test')
@@ -1393,13 +1393,13 @@ class TestRequesterFactory(unittest.TestCase):
         self.assertDictEqual({}, rf.menu_dict)
 
     def test_is_a_ReporterFactory_instance(self):
-        rf = RQF(Mock(), 'test')
+        rf = RQF(mock.Mock(), 'test')
         self.assertIsInstance(rf, RF)
 
     def test_create(self):
         """Create requester object"""
-        rf = RQF(Mock(), 'test')
-        mock_extension = Mock()
+        rf = RQF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, rf.create)
         r = rf.create(mock_extension)
         self.assertIsInstance(r, RQ)
@@ -1415,8 +1415,8 @@ class TestRequester(unittest.TestCase):
     """
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and WaiterCommandFactory as second"""
         self.assertRaises(TypeError, RQ)
@@ -1432,13 +1432,13 @@ class TestRequester(unittest.TestCase):
         self.assertEqual('R', r.type)
 
     def test_is_Reporter_subclass(self):
-        mock_e = Mock()  # Mock the extension
-        mock_rf = MagicMock()  # Mock the request info
+        mock_e = mock.Mock()  # Mock the extension
+        mock_rf = mock.MagicMock()  # Mock the request info
         r = RQ(mock_e, mock_rf)
         self.assertIsInstance(r, R)
 
     def get_requester(self, name="requester", default=0, description=None, do_read=None):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         return RQ.create(mock_e, name=name, default=default, description=description, do_read=do_read)
 
     def test_execute_busy_read_no_args(self):
@@ -1514,7 +1514,7 @@ class TestRequester(unittest.TestCase):
         self.assertEquals([(busy, v * 3, None)], r.results)
         self.assertDictEqual({2: {1: 36}}, r.value)
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_results_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         r = self.get_requester()
@@ -1541,12 +1541,12 @@ class TestRequester(unittest.TestCase):
         self.assertEqual(r.results, [])
         self.assertEqual(r.get_results(),
             [])
-        with patch("threading.RLock") as m_lock:
+        with mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             r = self.get_requester()
             r.get_results()
-            self.assertEqual(m_lock.mock_calls[0], call.__enter__())
-            self.assertEqual(m_lock.mock_calls[-1], call.__exit__(None, None, None))
+            self.assertEqual(m_lock.mock_calls[0], mock.call.__enter__())
+            self.assertEqual(m_lock.mock_calls[-1], mock.call.__exit__(None, None, None))
 
     def test_get_async_start_thread_to_execute_execute_busy_read_no_args(self):
         """Add busy, create thread with execute_busy_read target, set daemon to True and start thread.
@@ -1555,11 +1555,11 @@ class TestRequester(unittest.TestCase):
         """
         r = self.get_requester()
         busy = 12345
-        r.do_read = Mock()
-        with patch("threading.Thread", autospec=True) as mock_thread_class:
+        r.do_read = mock.Mock()
+        with mock.patch("threading.Thread", autospec=True) as mock_thread_class:
             mock_thread = mock_thread_class.return_value
             r.get_async(busy)
-            mock_thread_class.assert_called_with(name=ANY, target=r.execute_busy_read, args=(busy,))
+            mock_thread_class.assert_called_with(name=mock.ANY, target=r.execute_busy_read, args=(busy,))
             mock_thread.setDaemon.assert_called_with(True)
             self.assertTrue(mock_thread.start.called)
         """Sanity chack without mocks"""
@@ -1567,7 +1567,7 @@ class TestRequester(unittest.TestCase):
 
         """Without do_read"""
         del r.do_read
-        with patch("threading.Thread", autospec=True) as mock_thread_class:
+        with mock.patch("threading.Thread", autospec=True) as mock_thread_class:
             r.get_async(busy)
             self.assertFalse(mock_thread_class.called)
         """Sanity chack without mocks"""
@@ -1578,11 +1578,11 @@ class TestRequester(unittest.TestCase):
         """
         r = self.get_requester(description="%n %n")
         busy = 12345
-        r.do_read = Mock()
-        with patch("threading.Thread", autospec=True) as mock_thread_class:
+        r.do_read = mock.Mock()
+        with mock.patch("threading.Thread", autospec=True) as mock_thread_class:
             mock_thread = mock_thread_class.return_value
             r.get_async(busy, 1, 2)
-            mock_thread_class.assert_called_with(name=ANY, target=r.execute_busy_read, args=(busy, 1, 2))
+            mock_thread_class.assert_called_with(name=mock.ANY, target=r.execute_busy_read, args=(busy, 1, 2))
         """Sanity chack without mocks"""
         r.get_async(busy, 2, 3)
 
@@ -1696,7 +1696,7 @@ class TestRequester(unittest.TestCase):
         r.set(533, 1)
         self.assertFalse(r.results)
 
-    @patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_busy_access_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         r = self.get_requester()
@@ -1737,7 +1737,7 @@ class TestRequester(unittest.TestCase):
         r.reset()
         self.assertEqual(r.results, [])
 
-        with patch("threading.RLock") as m_lock:
+        with mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """Must rebuild to hane the mock"""
             r = self.get_requester()
@@ -1753,10 +1753,10 @@ class TestRequester(unittest.TestCase):
         """execute in line get() method"""
         cgi = r.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
-        with patch.object(r, "get_async", autospec=True) as mock_get_async, \
-                patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
+        with mock.patch.object(r, "get_async", autospec=True) as mock_get_async, \
+                mock.patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
             mock_blockable_get.return_value = 1232
-            self.assertEqual("1232", cgi(Mock(path="My%20Name")))
+            self.assertEqual("1232", cgi(mock.Mock(path="My%20Name")))
             self.assertFalse(mock_get_async.called)
 
         """One argument that is an integer: call get_async"""
@@ -1764,8 +1764,8 @@ class TestRequester(unittest.TestCase):
         cgi = r.get_cgi("/My%20Name/1234")
         self.assertIsNotNone(cgi)
         self.assertEqual({}, cgi.headers)
-        with patch.object(r, "get_async", autospec=True) as mock_update:
-            self.assertEqual("", cgi(Mock(path="My%20Name/3452")))
+        with mock.patch.object(r, "get_async", autospec=True) as mock_update:
+            self.assertEqual("", cgi(mock.Mock(path="My%20Name/3452")))
             mock_update.assert_called_with(3452)
 
     def test_get_cgi_one_int_arg(self):
@@ -1777,10 +1777,10 @@ class TestRequester(unittest.TestCase):
         """execute in line get() method"""
         cgi = r.get_cgi("/My%20Name/12")
         self.assertIsNotNone(cgi)
-        with patch.object(r, "get_async", autospec=True) as mock_get_async, \
-                patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
+        with mock.patch.object(r, "get_async", autospec=True) as mock_get_async, \
+                mock.patch.object(r, "busy_get", autospec=True) as mock_blockable_get:
             mock_blockable_get.return_value = 1232
-            self.assertEqual("1232", cgi(Mock(path="My%20Name/12")))
+            self.assertEqual("1232", cgi(mock.Mock(path="My%20Name/12")))
             self.assertFalse(mock_get_async.called)
 
         """match int,int: call get_async"""
@@ -1788,12 +1788,12 @@ class TestRequester(unittest.TestCase):
         cgi = r.get_cgi("/My%20Name/12/13")
         self.assertIsNotNone(cgi)
         self.assertEqual({}, cgi.headers)
-        with patch.object(r, "get_async", autospec=True) as mock_get_async:
-            self.assertEqual("", cgi(Mock(path="My%20Name/12/13")))
+        with mock.patch.object(r, "get_async", autospec=True) as mock_get_async:
+            self.assertEqual("", cgi(mock.Mock(path="My%20Name/12/13")))
             mock_get_async.assert_called_with(12, 13)
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         r = RQ.create(mock_e, "requester")
         self.assertIs(mock_e, r.extension)
         self.assertEqual(r.name, "requester")
@@ -1826,7 +1826,7 @@ class TestRequester(unittest.TestCase):
         self.assertEqual(v, r.busy_get())
         v = 23
         self.assertEqual(v, r.busy_get())
-        with patch.object(r, "_condition", autospec=True) as mock_condition:
+        with mock.patch.object(r, "_condition", autospec=True) as mock_condition:
             r.busy_get()
             self.assertFalse(mock_condition.__enter__.called)
 
@@ -1926,8 +1926,8 @@ class TestBooleanBlock(unittest.TestCase):
     """
 
     def test_base(self):
-        mock_e = Mock()  # Mock the extension
-        mock_ed = Mock()  # Mock the extension definition
+        mock_e = mock.Mock()  # Mock the extension
+        mock_ed = mock.Mock()  # Mock the extension definition
 
         """Costructor take extension as first argument and WaiterCommandFactory as second"""
         self.assertRaises(TypeError, B)
@@ -1943,8 +1943,8 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual('b', b.type)
 
     def get_block(self, description="Are you done?", *args, **kwargs):
-        bf = BF(ed=Mock(), name="ok", description=description, *args, **kwargs)
-        return B(Mock(), bf)
+        bf = BF(ed=mock.Mock(), name="ok", description=description, *args, **kwargs)
+        return B(mock.Mock(), bf)
 
     def test_is_Reporter_subclass(self):
         b = self.get_block()
@@ -2033,7 +2033,7 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual("false", b.get(14))
 
 
-    @patch("threading.RLock", autospec=True)
+    @mock.patch("threading.RLock", autospec=True)
     def test_clear_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         b = self.get_block()
@@ -2047,7 +2047,7 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertTrue(m_lock.__exit__.called)
 
     def test_create(self):
-        mock_e = Mock()
+        mock_e = mock.Mock()
         b = B.create(mock_e, "bool")
         self.assertIs(mock_e, b.extension)
         self.assertEqual(b.name, "bool")
@@ -2075,7 +2075,7 @@ class TestBooleanFactory(unittest.TestCase):
 
     def test_base(self):
         """Costructor take ExtensionDefinition as first argument and name as second"""
-        med = Mock()
+        med = mock.Mock()
         self.assertRaises(TypeError, BF)
         self.assertRaises(TypeError, BF, med)
         bf = BF(med, 'test')
@@ -2087,13 +2087,13 @@ class TestBooleanFactory(unittest.TestCase):
         self.assertDictEqual({}, bf.menu_dict)
 
     def test_is_a_ReporterFactory_instance(self):
-        bf = BF(Mock(), 'test')
+        bf = BF(mock.Mock(), 'test')
         self.assertIsInstance(bf, RF)
 
     def test_create(self):
         """Create requester object"""
-        bf = BF(Mock(), 'test')
-        mock_extension = Mock()
+        bf = BF(mock.Mock(), 'test')
+        mock_extension = mock.Mock()
         self.assertRaises(TypeError, bf.create)
         b = bf.create(mock_extension)
         self.assertIsInstance(b, B)
