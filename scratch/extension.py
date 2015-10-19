@@ -1,11 +1,13 @@
 import six
-
+# noinspection PyUnresolvedReferences
 from six.moves.BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-import io
-import logging
+# noinspection PyUnresolvedReferences
 from six.moves.socketserver import ThreadingMixIn
-import threading
+# noinspection PyUnresolvedReferences
 from six.moves import urllib
+from six import StringIO
+import logging
+import threading
 
 import weakref
 from scratch.cgi import CGI
@@ -20,7 +22,7 @@ EXTENSION_DEFAULT_PORT = 0
 DEFAULT_QUEUE_SIZE = 10
 
 
-class ExtensionDefinition():
+class ExtensionDefinition(object):
     """Contiene la descrizione di una estensione con i descrittore. Di fatto e' una
     classe astratta: la sua implementazione es' la factory per costruire le estensioni
     """
@@ -55,7 +57,6 @@ class ExtensionDefinition():
         self._components = {}
         self._register_name(name, self)
 
-
     @property
     def name(self):
         return self._name
@@ -71,6 +72,7 @@ class ExtensionDefinition():
     def get_component(self, name):
         return self._components[name]
 
+    # noinspection PyMethodMayBeStatic
     def _check_components(self, *components):
         for c in components:
             try:
@@ -80,7 +82,7 @@ class ExtensionDefinition():
 
     def _check_if_already_in(self, *components):
         for c in components:
-            if c.name in self._components and not c is self._components[c.name]:
+            if c.name in self._components and c is not self._components[c.name]:
                 raise ValueError("Il componente dal nome {} esiste gia'".format(c.name))
 
     def _register_components(self, *components):
@@ -141,7 +143,7 @@ class Extension(object):
         return self._factory
 
     def define_factory(self, factory):
-        if self._factory is not None and not factory is self._factory:
+        if self._factory is not None and factory is not self._factory:
             raise RuntimeError("Factory can be defined just once")
         self._factory = factory
 
@@ -165,7 +167,7 @@ class Extension(object):
         return self._components[name]
 
     def do_reset(self):
-        "Method to override to and application specific reset actions"
+        """Method to override to and application specific reset actions"""
         pass
 
     def reset(self):
@@ -178,7 +180,7 @@ class Extension(object):
         for c in self.components:
             p = c.poll()
             if c:
-                values.update({(c.name,)+k:v for k,v in p.items()})
+                values.update({(c.name,) + k: v for k, v in p.items()})
         return values
 
     @property
@@ -187,7 +189,7 @@ class Extension(object):
         for c in self.components:
             busy.update(c.busy)
         return busy
-    
+
     @property
     def results(self):
         results = []
@@ -200,7 +202,7 @@ class Extension(object):
                 for busy, v, exception in rs:
                     results.append((busy, v))
                     if exception is not None:
-                        self._problem = "[{}] : {}".format(c.name,str(exception))
+                        self._problem = "[{}] : {}".format(c.name, str(exception))
         return results
 
     @property
@@ -222,17 +224,20 @@ class Extension(object):
             ret.update(c.info.menus)
         return ret
 
+
 class _BaseHttpMultithreadServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
     request_queue_size = DEFAULT_QUEUE_SIZE
 
+
 def _map_arg(arg):
-    if arg == True:
+    if arg is True:
         return "true"
-    elif arg == False:
+    elif arg is False:
         return "false"
     return str(arg)
+
 
 def render_args(*args):
     return "/".join([urllib.parse.quote(_map_arg(a)) for a in args])
@@ -246,10 +251,10 @@ class ExtensionService(object):
     class HTTPHandler(BaseHTTPRequestHandler):
         @property
         def context(self):
-            return self.server._context()
+            return self.server.context()
 
         def _get_cgi(self):
-            return self.context._get_cgi(self.path)
+            return self.context.get_cgi(self.path)
 
         def _set_headers_from_cgi(self, cgi):
             if cgi.headers:
@@ -258,6 +263,7 @@ class ExtensionService(object):
             else:
                 self.send_header("Content-type", "text/html")
 
+        # noinspection PyPep8Naming
         def do_HEAD(self):
             cgi = self._get_cgi()
             if not cgi:
@@ -267,6 +273,7 @@ class ExtensionService(object):
                 self._set_headers_from_cgi(cgi=cgi)
             self.end_headers()
 
+        # noinspection PyPep8Naming
         def do_GET(self):
             data = ''
             cgi = self._get_cgi()
@@ -283,7 +290,7 @@ class ExtensionService(object):
                     self._set_headers_from_cgi(cgi=cgi)
 
             self.end_headers()
-            self.wfile.write(bytes(data, "utf-8"))
+            self.wfile.write(six.b(data))
 
     _names = {}
 
@@ -314,7 +321,7 @@ class ExtensionService(object):
         self._port = port
         self._server_thread = None
         self._http = _BaseHttpMultithreadServer((address, port), ExtensionService.HTTPHandler)
-        self._http._context = weakref.ref(self)
+        self._http.context = weakref.ref(self)
         self._cgi_map = {"/poll": {"cgi": "_poll_cgi"},
                          "/crossdomain.xml": {"cgi": "_crossdomain_xml",
                                               "headers": {"Content-type": "text/xml"}},
@@ -360,19 +367,21 @@ class ExtensionService(object):
                "extensionPort": self.port,
                "blockSpecs": self._extension.block_specs,
                "menus": self._extension.menus
-        }
+               }
         return ret
 
+    # noinspection PyUnusedLocal
     def _poll_cgi(self, handler):
         return self.poll_dict_render(self._extension.poll()) + self.busy_render(self._extension.busy) + \
                self.results_render(self._extension.results) + self.problem_render(self._extension.problem)
 
     @staticmethod
     def poll_dict_render(vals):
-        sio = io.StringIO()
+        sio = StringIO()
         for v, k in vals.items():
             value = urllib.parse.quote(str(k))
-            sio.write('%s %s\n' % (render_args(*v), value))
+            ra = render_args(*v)
+            sio.write('%s %s\n' % (ra, value))
         return sio.getvalue()
 
     @staticmethod
@@ -385,7 +394,7 @@ class ExtensionService(object):
     def results_render(vals):
         if not vals:
             return ""
-        return "\n".join("_result {} {}".format(busy, val) for busy,val in vals)+"\n"
+        return "\n".join("_result {} {}".format(busy, val) for busy, val in vals) + "\n"
 
     @staticmethod
     def problem_render(problem):
@@ -393,11 +402,13 @@ class ExtensionService(object):
             return ""
         return "_problem {}\n".format(problem)
 
+    # noinspection PyUnusedLocal
     def _crossdomain_xml(self, request):
         return """<cross-domain-policy>
 <allow-access-from domain="*" to-ports="{}"/>
 </cross-domain-policy>""".format(self.port)
 
+    # noinspection PyUnusedLocal
     def reset(self, request=None):
         self._extension.reset()
         return ""
@@ -418,7 +429,7 @@ class ExtensionService(object):
             if cgi is not None:
                 return cgi
 
-    def _get_cgi(self, path):
+    def get_cgi(self, path):
         cgi = self._resolve_components_cgi(path)
         if cgi is not None:
             return cgi
@@ -442,4 +453,3 @@ class ExtensionServiceBase(ExtensionService):
     def __init__(self, definition, name, address=EXTENSION_DEFAULT_ADDRESS, port=EXTENSION_DEFAULT_PORT):
         super(ExtensionServiceBase, self).__init__(extension=ExtensionBase(definition=definition), name=name,
                                                    address=address, port=port)
-

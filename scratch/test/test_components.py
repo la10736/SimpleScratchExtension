@@ -1,8 +1,9 @@
 import unittest
-
-import six
-six.add_move(six.MovedModule("mock", "mock", "unittest.mock"))
+# noinspection PyUnresolvedReferences
+import scratch.six_moves
+# noinspection PyUnresolvedReferences
 from six.moves import mock
+# noinspection PyPep8Naming
 from scratch.components import Sensor as S, SensorFactory as SF, \
     Command as C, CommandFactory as CF, HatFactory as HF, Hat as H, \
     WaiterCommand as W, WaiterCommandFactory as WF, Requester as RQ, \
@@ -13,7 +14,6 @@ import copy
 import threading
 
 __author__ = 'michele'
-
 
 
 class TestReporterFactory(unittest.TestCase):
@@ -248,7 +248,7 @@ class TestReporter(unittest.TestCase):
                         ("a", "d"): 30,
                         ("b", "c"): 19,
                         ("b", "d"): 19,
-        }
+                        }
         results = orig_results.copy()
         self.assertDictEqual(d, r.value)
         self.assertDictEqual(results, r.poll())
@@ -306,7 +306,7 @@ class TestReporter(unittest.TestCase):
         r.set("hi")
         self.assertEqual("hi", r.get())
 
-    @mock.mock.patch("threading.RLock", autospec=True)
+    @mock.patch("threading.RLock", autospec=True)
     def test_get_and_set_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = mock.Mock()  # Mock extension
@@ -363,8 +363,7 @@ class TestReporter(unittest.TestCase):
         rrf = RF(mock_e, 'test', description="Numbers of %d.gender from %d.state", gender=["male", "female"],
                  state=["Italy", "USA", "Germany"])
         r = R(mock_e, rrf, value={"male": {None: 33}, "female": {"USA": 11, None: 44}, None: 1})
-        d = {"male": {j: 33 for j in ["Italy", "USA", "Germany"]}}
-        d["female"] = {j: 44 for j in ["Italy", "Germany"]}
+        d = {"male": {j: 33 for j in ["Italy", "USA", "Germany"]}, "female": {j: 44 for j in ["Italy", "Germany"]}}
         d["female"]["USA"] = 11
         self.assertDictEqual(d, r.value)
         r.set(77, "male", "Italy")
@@ -383,10 +382,11 @@ class TestReporter(unittest.TestCase):
         r.set(12, "test", "male")
         self.assertDictEqual({"test": {"male": 12, "female": 55}}, r.value)
 
-        with mock.mock.patch("threading.RLock") as m_lock:
+        with mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """We must rebuild s to mock lock"""
             r = R(mock_e, rrf, value=75)
+            # noinspection PyStatementEffect
             r.value
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
@@ -402,7 +402,7 @@ class TestReporter(unittest.TestCase):
         """just call s.reset()"""
         r.reset()
 
-    @mock.mock.patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = mock.Mock()  # Mock the extension
@@ -603,7 +603,7 @@ class TestSensor(unittest.TestCase):
         self.assertIs(s.description, mock_sf.description)
         self.assertIs(s.definition, mock_sf.definition)
 
-    @mock.mock.patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_get_and_set_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = mock.Mock()  # Mock the extension
@@ -644,10 +644,11 @@ class TestSensor(unittest.TestCase):
         s.get()
         self.assertEqual(12, s.value)
 
-        with mock.mock.patch("threading.RLock") as m_lock:
+        with mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             """We must rebuild s to mock lock"""
             s = S(mock_e, mock_sf, value=56)
+            # noinspection PyStatementEffect
             s.value
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
@@ -656,7 +657,7 @@ class TestSensor(unittest.TestCase):
             self.assertTrue(m_lock.__enter__.called)
             self.assertTrue(m_lock.__exit__.called)
 
-    @mock.mock.patch("threading.RLock")
+    @mock.patch("threading.RLock")
     def test_reset_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         mock_e = mock.Mock()  # Mock the extension
@@ -685,7 +686,7 @@ class TestSensor(unittest.TestCase):
         cgi = s.get_cgi("/My%20Name")
         self.assertIsNotNone(cgi)
         self.assertEqual("a", cgi(mock.Mock(path="/My%20Name")))
-        s.do_read = lambda : "do_read"
+        s.do_read = lambda: "do_read"
         self.assertEqual("do_read", cgi(mock.Mock(path="/My%20Name")))
 
     def test_create(self):
@@ -724,7 +725,7 @@ class TestSensor(unittest.TestCase):
 class TestCommandFactory(unittest.TestCase):
     """We are testing the commands descriptors. They define name and description."""
 
-    @mock.mock.patch("scratch.components.CommandFactory._check_description", return_value=True)
+    @mock.patch("scratch.components.CommandFactory._check_description", return_value=True)
     def test_base(self, mock_check_description):
         """Costructor take ExtensionDefinition as first argument and name as second"""
         med = mock.Mock()
@@ -754,7 +755,6 @@ class TestCommandFactory(unittest.TestCase):
         mock_check_description.return_value = False
         self.assertRaises(ValueError, CF, med, 'test')
 
-
     @unittest.skip("Not Implementetd yet")
     def test_parse_description(self):
         """"return a list of callable functions to convert arguments or names (string) of menu"""
@@ -764,6 +764,7 @@ class TestCommandFactory(unittest.TestCase):
     def test__check_description(self):
         self.fail("IMPLEMENT")
 
+    # noinspection PyUnusedLocal
     @mock.patch("scratch.components.CommandFactory._check_description", return_value=True)
     def test_definition(self, mock_check_description):
         """Give command definition as list to send as JSON object """
@@ -969,7 +970,6 @@ class TestHatFactory(unittest.TestCase):
         self.assertIsNone(hf.ed)
         self.assertEqual(('test', r'test %n test %s nnn %b'), (hf.name, hf.description))
 
-
     def test_definition(self):
         """Give command definition as list to send as JSON object """
         hf = HF(ed=mock.Mock(), name="goofy", description="donald duck")
@@ -1155,6 +1155,7 @@ class TestHat(unittest.TestCase):
 class TestWaiterCommandFactory(unittest.TestCase):
     """We are testing the commands that can wait descriptors. They define name and description."""
 
+    # noinspection PyUnusedLocal
     @mock.patch("scratch.components.WaiterCommandFactory._check_description", return_value=True)
     def test_base(self, mock_check_description):
         """Costructor take ExtensionDefinition as first argument and name as second"""
@@ -1234,6 +1235,7 @@ class TestWaiterCommand(unittest.TestCase):
 
         """Work even busy is not in bust set"""
 
+        # noinspection PyUnusedLocal
         def do_command(a, b):
             pass
 
@@ -1243,8 +1245,9 @@ class TestWaiterCommand(unittest.TestCase):
 
         w._busy.add(busy)
 
+        # noinspection PyUnusedLocal
         def do_command(a, b):
-            self.assertIn(busy, w.busy)
+            self.assertIn(busy, w._busy)
             raise Exception()
 
         w.do_command = do_command
@@ -1285,6 +1288,7 @@ class TestWaiterCommand(unittest.TestCase):
         mock_e = mock.Mock()  # Mock the extension
         mock_cf = mock.MagicMock()  # Mock the sensor info
         w = W(mock_e, mock_cf)
+        # noinspection PyStatementEffect
         w.busy
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
@@ -1345,7 +1349,7 @@ class TestWaiterCommand(unittest.TestCase):
         with mock.patch.object(w, "command", autospec=True) as mock_command:
             self.assertEqual("", cgi(mock.Mock(path="My%20Name/3452")))
             mock_command.assert_called_with(3452)
-            mock_command.reset_mock
+            mock_command.reset_mock()
             self.assertEqual("", cgi(mock.Mock(path="My%20Name/54321/b/c%20d/1234")))
             mock_command.assert_called_with(54321, "b", "c d", "1234")
 
@@ -1368,6 +1372,7 @@ class TestWaiterCommand(unittest.TestCase):
         self.assertEqual(w.name, "control2")
         self.assertEqual(w.info.default, (1, 2, 3))
         self.assertEqual(w.description, "ASD")
+        # noinspection PyUnresolvedReferences
         self.assertIs(do_command, w.do_command)
 
     def test_poll(self):
@@ -1518,6 +1523,7 @@ class TestRequester(unittest.TestCase):
     def test_results_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         r = self.get_requester()
+        # noinspection PyStatementEffect
         r.results
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
@@ -1540,7 +1546,7 @@ class TestRequester(unittest.TestCase):
 
         self.assertEqual(r.results, [])
         self.assertEqual(r.get_results(),
-            [])
+                         [])
         with mock.patch("threading.RLock") as m_lock:
             m_lock = m_lock.return_value
             r = self.get_requester()
@@ -1700,6 +1706,7 @@ class TestRequester(unittest.TestCase):
     def test_busy_access_synchronize(self, m_lock):
         m_lock = m_lock.return_value
         r = self.get_requester()
+        # noinspection PyStatementEffect
         r.busy
         self.assertTrue(m_lock.__enter__.called)
         self.assertTrue(m_lock.__exit__.called)
@@ -1943,7 +1950,7 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual('b', b.type)
 
     def get_block(self, description="Are you done?", *args, **kwargs):
-        bf = BF(ed=mock.Mock(), name="ok", description=description, *args, **kwargs)
+        bf = BF(ed=mock.Mock(), name="ok", description=description, **kwargs)
         return B(mock.Mock(), bf)
 
     def test_is_Reporter_subclass(self):
@@ -2021,7 +2028,6 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual("false", b.get(2, 3))
         self.assertEqual("false", b.get(2, 4))
 
-
     def test_clear_default_True(self):
         b = self.get_block(default=True, description="%m.ages", ages=[12, 13, 14])
         self.assertEqual("true", b.get(12))
@@ -2031,7 +2037,6 @@ class TestBooleanBlock(unittest.TestCase):
         self.assertEqual("false", b.get(12))
         self.assertEqual("false", b.get(13))
         self.assertEqual("false", b.get(14))
-
 
     @mock.patch("threading.RLock", autospec=True)
     def test_clear_synchronize(self, m_lock):
@@ -2101,7 +2106,7 @@ class TestBooleanFactory(unittest.TestCase):
         self.assertIs(b.info, bf)
 
 
-class Test_utils(unittest.TestCase):
+class TestUtils(unittest.TestCase):
     """Testing useful functions"""
 
     def test_to_bool(self):
@@ -2125,7 +2130,6 @@ class Test_utils(unittest.TestCase):
         self.assertEqual((), parse_description("Minnie"))
         self.assertEqual((str,), parse_description("Minnie %s"))
         self.assertEqual((str, float, to_bool), parse_description("Minnie %s from value %n is %b"))
-
 
     def test_parse_description_menu(self):
         """Add some menues"""
@@ -2161,7 +2165,6 @@ class Test_utils(unittest.TestCase):
 
         """Not valid menu"""
         self.assertRaises(TypeError, parse_description, "Minnie %m.my_menu", my_menu=123)
-
 
     def test_parse_description_menu_mapper(self):
         """If the requester menu is a mapper elements return the mapped object instead the key"""

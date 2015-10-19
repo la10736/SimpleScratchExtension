@@ -1,19 +1,20 @@
-import unittest
-from six.moves.BaseHTTPServer import HTTPServer
-
-# import http
 import six
-six.add_move(six.MovedModule("mock", "mock", "unittest.mock"))
+# noinspection PyUnresolvedReferences
+import scratch.six_moves
+# noinspection PyUnresolvedReferences
+from six.moves import mock
+# noinspection PyUnresolvedReferences
 from six.moves import socketserver
+# noinspection PyUnresolvedReferences
+from six.moves.BaseHTTPServer import HTTPServer
+import unittest
 import time
 import scratch
-from six.moves import mock
-from scratch.extension import ExtensionDefinition as ED, render_args
-from scratch.extension import Extension as E
-from scratch.extension import ExtensionService as ES, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
-from scratch.extension import ExtensionBase as EB
-from scratch.extension import ExtensionServiceBase as EBS
-from scratch.components import CommandFactory, Sensor, HatFactory
+# noinspection PyPep8Naming
+from scratch.extension import ExtensionDefinition as ED, Extension as E, ExtensionService as ES, ExtensionBase as EB, \
+    ExtensionServiceBase as EBS
+from scratch.extension import render_args, EXTENSION_DEFAULT_PORT, EXTENSION_DEFAULT_ADDRESS
+from scratch.components import CommandFactory, HatFactory
 
 __author__ = 'michele'
 
@@ -40,7 +41,7 @@ class TestExstensionDefinition(unittest.TestCase):
 
     def test_name(self):
         """Deve essere unico"""
-        ed = ED("donald duck")
+        ED("donald duck")
         self.assertRaises(ValueError, ED, "donald duck")
 
     def test_registered(self):
@@ -275,7 +276,6 @@ class TestExtension(unittest.TestCase):
         e._init_components()
         self.assertEqual(set(e.components), set(Ex.tst_cmp))
 
-
     def test_components(self):
         """The set of the components"""
         e = E()
@@ -284,11 +284,9 @@ class TestExtension(unittest.TestCase):
         e._components = cmps
         self.assertEqual(set(cmps.values()), set(e.components))
 
-
     def test_components_name(self):
         """The set of the components"""
         e = E()
-        components = e.components_name
         self.assertSetEqual(set(), set(e.components_name))
         cmps = {"a": mock.Mock(), "b": mock.Mock()}
         e._components = cmps
@@ -338,12 +336,12 @@ class TestExtension(unittest.TestCase):
 
     def test_menus_some_menus_no_default_val_no_maps(self):
         ed = ED("def")
-        ed.add_reporter("reporter 1", value={None:0}, description="%m.first", first=["1", "2", "3"])
+        ed.add_reporter("reporter 1", value={None: 0}, description="%m.first", first=["1", "2", "3"])
         e = EB(ed)
         self.assertDictEqual({"first": ["1", "2", "3"]}, e.menus)
 
         ed = ED("def2")
-        ed.add_reporter("reporter 1", description="%m.first", first={"1":1, "2":2, "3":3})
+        ed.add_reporter("reporter 1", description="%m.first", first={"1": 1, "2": 2, "3": 3})
         e = EB(ed)
         self.assertDictEqual({"first": ["1", "2", "3"]}, e.menus)
 
@@ -372,9 +370,9 @@ class TestExtension(unittest.TestCase):
 
         """SAnity chack"""
         """hat, command and waitercommand ... no contribution """
-        h = ed.add_hat("x0")
-        c = ed.add_command("x1")
-        w = ed.add_waiter_command("x2")
+        ed.add_hat("x0")
+        ed.add_command("x1")
+        ed.add_waiter_command("x2")
         ed.add_requester("R0", value=12)
         ed.add_requester("R1", value="AA")
         e = EB(ed)
@@ -440,21 +438,8 @@ class TestExtension(unittest.TestCase):
         ed.add_waiter_command("x2")
         e = EB(ed)
         self.assertDictEqual({("s0",): "S", ("s1",): 1}, e.poll())
+        # noinspection PyStatementEffect
         e.results
-
-
-@mock.patch("scratch.extension.Extension.components", new_callable=mock.PropertyMock)
-@mock.patch("scratch.extension.Extension.do_reset", autospec=True)
-def test_reset(self, mock_do_reset, mock_components):
-    """Must call reset() for each component, do_reset() (method designed to
-    override)"""
-    e = E()
-    components = [mock.Mock() for _ in range(5)]
-    mock_components.return_value = components
-    e.reset()
-    for m in components:
-        m.reset.assert_called_with()
-    mock_do_reset.assert_called_with(e)
 
 
 class TestExtensionService(unittest.TestCase):
@@ -489,10 +474,9 @@ class TestExtensionService(unittest.TestCase):
         self.assertTrue(s.daemon_threads)
         self.assertTrue(s.allow_reuse_address)
 
-
     def test_name(self):
         """Must be unique"""
-        es = ES(E(), "goofy")
+        ES(E(), "goofy")
         self.assertRaises(ValueError, ES, E(), "goofy")
 
     def test_registered(self):
@@ -517,7 +501,7 @@ class TestExtensionService(unittest.TestCase):
                "extensionPort": es.port,
                "blockSpecs": [],
                "menus": menus,
-        }
+               }
         m_extension_block_specs.return_value = block_specs
         m_extension_menus.return_value = menus
         self.assertDictEqual(res, es.description)
@@ -567,7 +551,6 @@ class TestExtensionService(unittest.TestCase):
         self.assertEquals("\n", r[-1])
         self.assertSetEqual({"_result 1232 2", "_result 3423 sss", "_result 21 invalid"},
                             set(r[:-1].split("\n")))
-
 
     def test_problems_render(self):
         es = ES(E(), "MyName")
@@ -649,6 +632,7 @@ class TestExtensionService(unittest.TestCase):
         es.stop()
         self.assertFalse(es.running)
         try:
+            # noinspection PyPropertyAccess
             es.running = True
             self.fail("MUST be a readonly property")
         except AttributeError:
@@ -656,7 +640,7 @@ class TestExtensionService(unittest.TestCase):
 
     def test_reset(self):
         """Must call reset() for each component, do_reset() (method designed to
-        override and return "" """
+        override) and return "" """
 
         class Ex(E):
             reset_call = False
@@ -677,12 +661,12 @@ class TestExtensionService(unittest.TestCase):
         - looking for local cgi : _resolve_local_cgi()
         """
         es = ES(E(), "MyName")
-        self.assertIs(mock_resolve_components_cgi.return_value, es._get_cgi("my_path"))
+        self.assertIs(mock_resolve_components_cgi.return_value, es.get_cgi("my_path"))
         self.assertFalse(mock_resolve_local_cgi.called)
-        mock_resolve_components_cgi.reset_mock
+        mock_resolve_components_cgi.reset_mock()
 
         mock_resolve_components_cgi.return_value = None
-        self.assertIs(mock_resolve_local_cgi.return_value, es._get_cgi("my_path"))
+        self.assertIs(mock_resolve_local_cgi.return_value, es.get_cgi("my_path"))
         self.assertTrue(mock_resolve_components_cgi.called)
 
     @mock.patch("scratch.extension.Extension.components", new_callable=mock.PropertyMock)
@@ -707,7 +691,7 @@ class TestExtensionService(unittest.TestCase):
 @mock.patch("scratch.extension.ExtensionService.HTTPHandler.send_response")
 @mock.patch("scratch.extension.ExtensionService.HTTPHandler.log_request")
 @mock.patch("scratch.extension.ExtensionService.HTTPHandler.parse_request", return_value=True)
-class TestExtension_HTTPHandler(unittest.TestCase):
+class TestExtensionHTTPHandler(unittest.TestCase):
     """We will test http request to extension handler"""
 
     def setUp(self):
@@ -719,8 +703,9 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         self.mock_wfile = self.mock_request.makefile.return_value
 
     def do_request(self):
-        handler = ES.HTTPHandler(self.mock_request, self.mock_client_address, self.es._http)
+        ES.HTTPHandler(self.mock_request, self.mock_client_address, self.es._http)
 
+    # noinspection PyUnusedLocal
     @mock.patch("scratch.extension.ExtensionService._poll_cgi", return_value="POLLER")
     def test_handle_poll(self, mock_cgi, mock_parse_request, mock_log_request,
                          mock_send_response, mock_send_header, mock_end_headers,
@@ -731,7 +716,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         self.do_request()
         self.assertTrue(mock_cgi.called)
         mock_send_response.assert_called_with(200)
-        self.mock_wfile.write.assert_called_with(bytes(mock_cgi.return_value, "utf-8"))
+        self.mock_wfile.write.assert_called_with(six.b(mock_cgi.return_value))
         mock_send_header.assert_called_with("Content-type", "text/html")
         self.assertTrue(mock_end_headers.called)
 
@@ -744,7 +729,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         mock_send_header.assert_called_with("Content-type", "text/html")
         self.assertTrue(mock_end_headers.called)
 
-
+    # noinspection PyUnusedLocal
     def test_handle_not_exist(self, mock_parse_request, mock_log_request,
                               mock_send_response, mock_send_header, mock_end_headers,
                               mock_request_version,
@@ -763,6 +748,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         mock_send_response.assert_called_with(404)
         self.assertTrue(mock_end_headers.called)
 
+    # noinspection PyUnusedLocal
     def test_handle_crossdomain_xml(self, mock_parse_request, mock_log_request,
                                     mock_send_response, mock_send_header, mock_end_headers,
                                     mock_request_version,
@@ -774,7 +760,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         data = """<cross-domain-policy>
 <allow-access-from domain="*" to-ports="{}"/>
 </cross-domain-policy>""".format(self.es.port)
-        self.mock_wfile.write.assert_called_with(bytes(data, "utf-8"))
+        self.mock_wfile.write.assert_called_with(six.b(data))
         mock_send_header.assert_called_with("Content-type", "text/xml")
         self.assertTrue(mock_end_headers.called)
 
@@ -787,6 +773,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         mock_send_header.assert_called_with("Content-type", "text/xml")
         self.assertTrue(mock_end_headers.called)
 
+    # noinspection PyUnusedLocal
     @mock.patch("scratch.extension.ExtensionService.reset", return_value="")
     def test_handle_reset_all_xml(self, mock_reset, mock_parse_request, mock_log_request,
                                   mock_send_response, mock_send_header, mock_end_headers,
@@ -800,7 +787,7 @@ class TestExtension_HTTPHandler(unittest.TestCase):
         mock_send_response.assert_called_with(200)
         mock_reset.asset_called_with(self.mock_request)
         data = ""
-        self.mock_wfile.write.assert_called_with(bytes(data, "utf-8"))
+        self.mock_wfile.write.assert_called_with(six.b(data))
         mock_send_header.assert_called_with("Content-type", "text/html")
         self.assertTrue(mock_end_headers.called)
 

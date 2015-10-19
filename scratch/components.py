@@ -2,14 +2,14 @@ import copy
 import inspect
 import logging
 import threading
+# noinspection PyUnresolvedReferences
 from six.moves import urllib
-# import urllib.parse
 import weakref
 import re
 import collections
+import time
 
 from scratch.cgi import CGI
-
 
 __author__ = 'michele'
 
@@ -60,7 +60,7 @@ class _CheckerContainer(_Checker):
 
     @property
     def elements(self):
-        return set(self._menu.copy())
+        return set(self._menu[:])
 
 
 def _create_menu_checker(menu):
@@ -71,6 +71,7 @@ def _create_menu_checker(menu):
     else:
         raise TypeError("Menu must be a Mapping or Container")
     return checker
+
 
 def _create_editable_menu_checker(menu):
     try:
@@ -84,7 +85,6 @@ def _create_editable_menu_checker(menu):
         checker = _CheckerContainer(menu, def_mapper)
     else:
         raise TypeError("Menu must be a Mapping or Container")
-
 
     return checker
 
@@ -154,7 +154,6 @@ class BlockFactory(object):
     def menu_dict(self):
         return self._menu_dict.copy()
 
-
     def create(self, extension, *args, **kwargs):
         cb = extract_arg(self.cb_arg, kwargs) if self.cb_arg is not None else None
         b = self.block_constructor(extension, self, *args, **kwargs)
@@ -169,7 +168,7 @@ class BlockFactory(object):
     @property
     def menus(self):
         ret = {}
-        for k,c in self.menu_dict.items():
+        for k, c in self.menu_dict.items():
             if isinstance(c, collections.Mapping):
                 ret[k] = list(c.keys())
             else:
@@ -261,7 +260,6 @@ class Block(object):
 
 
 class Reporter(Block):
-
     @staticmethod
     def create(extension, name, default=None, description=None, **kwargs):
         do_read = extract_arg("do_read", kwargs)
@@ -301,37 +299,37 @@ class Reporter(Block):
         return d
 
     def _values_dict(self, flat=False):
-            signature = self.signature
-            l = len(signature)
-            if not l:
-                return self._value
-            values = {}
-            stack = [([], self._value, values)]
-            for s in signature:
-                l -= 1
-                new_stack=[]
-                try:
-                    other = s.elements
-                except AttributeError:
-                    other = set()
-                while stack:
-                    args,src,dst = stack.pop()
-                    elements = {e for e in other.copy().union(src.keys()) if e is not None}
-                    for e in elements:
-                        new_args = args.copy()+[e]
-                        if l:
-                            d = {}
-                            if not flat:
-                               dst[e] = d
-                            new_stack += [(new_args, src.get(e,{}), d)]
+        signature = self.signature
+        l = len(signature)
+        if not l:
+            return self._value
+        values = {}
+        stack = [([], self._value, values)]
+        for s in signature:
+            l -= 1
+            new_stack = []
+            try:
+                other = s.elements
+            except AttributeError:
+                other = set()
+            while stack:
+                args, src, dst = stack.pop()
+                elements = {e for e in other.copy().union(src.keys()) if e is not None}
+                for e in elements:
+                    new_args = args[:] + [e]
+                    if l:
+                        d = {}
+                        if not flat:
+                            dst[e] = d
+                        new_stack += [(new_args, src.get(e, {}), d)]
+                    else:
+                        v = self._resolve_values(*new_args)
+                        if not flat:
+                            dst[e] = v
                         else:
-                            v = self._resolve_values(*new_args)
-                            if not flat:
-                                dst[e] = v
-                            else:
-                                values[tuple(new_args)] = v
-                stack = new_stack
-            return values
+                            values[tuple(new_args)] = v
+            stack = new_stack
+        return values
 
     @property
     def value(self):
@@ -352,7 +350,7 @@ class Reporter(Block):
                 d[args[-1]] = value
 
     def _convert_args(self, *args):
-        if not len(args)+len(self.signature):
+        if not len(args) + len(self.signature):
             return ()
         try:
             return tuple(map(lambda x, y: x(y), self.signature, args))
@@ -427,6 +425,7 @@ class ReporterFactory(BlockFactory):
     def default(self):
         return self._default
 
+
 class Sensor(Reporter):
     """A simple reporter without arguments
     """
@@ -436,6 +435,7 @@ class Sensor(Reporter):
         do_read = extract_arg("do_read", kwargs)
         factory = SensorFactory(ed=None, name=name, default=default, description=description, **kwargs)
         return factory.create(extension=extension, do_read=do_read)
+
 
 class SensorFactory(ReporterFactory):
     block_constructor = Sensor
@@ -453,6 +453,7 @@ class SensorFactory(ReporterFactory):
         if self.signature:
             raise ValueError("Sensor doesn't support arguments: change description [{}]".format(description))
         self._default = default
+
 
 class BooleanBlock(Reporter):
     @staticmethod
@@ -477,7 +478,7 @@ class BooleanBlock(Reporter):
             while stack:
                 d = stack.pop()
                 for k in d:
-                    if isinstance(d[k],collections.Mapping):
+                    if isinstance(d[k], collections.Mapping):
                         stack.append(d[k])
                     else:
                         d[k] = False
@@ -510,6 +511,7 @@ class Command(Block):
         with self._lock:
             if self._value is None:
                 return None
+            # noinspection PyTypeChecker
             if len(self._value) == 1:
                 return self._value[0]
             return self._value
@@ -660,6 +662,35 @@ class WaiterCommandFactory(CommandFactory):
     block_constructor = WaiterCommand
 
 
+def _wait_for_backport(self, predicate, timeout=None):
+    """Wait until a condition evaluates to True.
+
+    predicate should be a callable which result will be interpreted as a
+    boolean value.  A timeout may be provided giving the maximum time to
+    wait.
+
+    """
+    endtime = None
+    waittime = timeout
+    result = predicate()
+    while not result:
+        if waittime is not None:
+            if endtime is None:
+                endtime = time.time() + waittime
+            else:
+                waittime = endtime - time.time()
+                if waittime <= 0:
+                    break
+        self.wait(waittime)
+        result = predicate()
+    return result
+
+
+def _check_and_fix_condition(condition):
+    if not hasattr(condition, "wait_for"):
+        type(condition).wait_for = _wait_for_backport
+
+
 class Requester(Reporter):
     @staticmethod
     def create(extension, name, default=None, description=None, **kwargs):
@@ -670,6 +701,7 @@ class Requester(Reporter):
     def __init__(self, extension, info, value=None):
         super(Requester, self).__init__(extension, info, value)
         self._condition = threading.Condition(self._lock)
+        _check_and_fix_condition(self._condition)
         self._ready = set()
         self._results = []
         self._pending_async_results = None
@@ -681,7 +713,7 @@ class Requester(Reporter):
     def _set_value(self, value, *args):
         args = tuple(args)
         with self._condition:
-            print("PRE "+str(self._ready))
+            print("PRE " + str(self._ready))
             super(Requester, self)._set_value(value, *args)
             if not hasattr(self, "do_read"):
                 s = {}
@@ -738,7 +770,7 @@ class Requester(Reporter):
             t.start()
 
     def busy_get(self, *args):
-        logging.info("busy_get {} args={}".format(self.name,args))
+        logging.info("busy_get {} args={}".format(self.name, args))
         if hasattr(self, "do_read"):
             return self.do_read(*args)
         with self._condition:
@@ -769,13 +801,13 @@ class Requester(Reporter):
             try:
                 busy = int(args[0])
             except ValueError:
-                return  None,None
+                return None, None
             args = args[1:]
         if l == ll:
             try:
                 conv_args = self._convert_args(*args)
             except TypeError:
-                return  None,None
+                return None, None
         return busy, conv_args
 
     def _sync_cgi(self, request):

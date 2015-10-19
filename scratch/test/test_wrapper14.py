@@ -1,11 +1,10 @@
-__author__ = 'michele'
-
 import unittest
-import six
-six.add_move(six.MovedModule("mock", "mock", "unittest.mock"))
+# noinspection PyUnresolvedReferences
+import scratch.six_moves
+# noinspection PyUnresolvedReferences
 from six.moves import mock
 from scratch.receiver14 import tokenizer, split_message, Scratch14SensorReceiverHandler
-
+__author__ = 'michele'
 
 
 class TestParser(unittest.TestCase):
